@@ -10,3 +10,8 @@ test-output/
 liveclip/assets/yamnet/yamnet.onnx
 *.download
 cloud-meter.json
+data-native/
+.local-uv/
+.local-ollama/
+.native.lock
+.liveclip-exit

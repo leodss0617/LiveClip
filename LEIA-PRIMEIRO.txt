@@ -165,3 +165,10 @@ GitHub. A estimativa não mede armazenamento nem uso de outras máquinas.
 Para autorizar o botão Parar máquina virtual, siga USAR-NO-GITHUB.md.
 Após a parada, abra github.com/codespaces para ligar novamente.
 Para receber esta atualização no terminal do Codespace: liveclip atualizar
+
+SE FICAR PRESO EM CONFIGURANDO O CODESPACE (0.1.14)
+Consulte USAR-NO-GITHUB.md, seção Recomeçar após ficar preso na criação.
+A configuração nova usa o ambiente padrão do GitHub. Criações antigas
+não recebem essa alteração automaticamente. Pare a máquina antiga antes
+de criar outra, quando a opção estiver disponível. Não exclua seus dados.
+Se abrir o terminal e houver erro: liveclip diagnostico

@@ -1,1 +1,1 @@
-VERSION = "0.1.13-controle-codespaces"
+VERSION = "0.1.14-inicio-diagnostico"

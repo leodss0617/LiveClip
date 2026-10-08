@@ -117,3 +117,16 @@ Guia de instalação, ativação e atualização incluído na raiz: LEIA-PRIMEIR
 - 152 testes automatizados passaram, incluindo persistência, autenticação, validação, estados ativos, rejeição GitHub e timeout. JavaScript validado por node --check.
 - Teste de navegador local: formulário, contagem regressiva, parada simulada e ausência de transbordamento em 390x844 e 1280x900; zero erros JS. Não é teste físico em Android/Windows.
 - A parada de Codespace real não foi executada durante a validação. A primeira construção/remota e o processamento de vídeos reais continuam dependendo de verificação no ambiente do usuário.
+
+## 0.1.14 — Revisão da inicialização
+
+Sintoma observado: tela de criação sem terminal por aproximadamente 25 minutos. Não há logs remotos disponíveis nesta sessão; não foi atribuída causa definitiva.
+
+- Revisado devcontainer, postCreate, instaladores, início nativo/Docker, preparação dos modelos, configuração/credenciais e fluxos cobertos pela suíte.
+- Reconfigurado Codespaces para imagem padrão administrada pelo GitHub, sem Features adicionais do projeto, com usuário codespace. PostCreate permanece curto e sem downloads de modelos. É uma simplificação para nova tentativa; não é comprovação de que as Features causaram a demora antiga.
+- Docker/Compose verificados antes dos modelos. Erros indicam etapa e comando de diagnóstico. Falha do GitHub CLI na visibilidade não oculta painel/serviços já iniciados; orienta verificar porta Private.
+- Novo `liveclip diagnostico` independente de Python/modelos/Docker funcionarem. Novas exclusões impedem dados nativos e credenciais de entrarem no contexto Docker/git.
+- Testes novos reproduzem diagnóstico indisponível e aborto indevido por falha de visibilidade na versão anterior, e verificam o comportamento corrigido. Suíte completa e validação sintática executadas.
+- Não foi possível reproduzir o provisionamento remoto do Codespace nem validar criação real desta configuração. Para confirmar a causa antiga, é necessário obter o creation log. Não há garantia de ausência de bugs ou disponibilidade externa.
+
+Resultado da revisão 0.1.14: **155 testes passaram**, 1 aviso de depreciação Starlette/httpx. Python compilou; todos os scripts Bash e JavaScript passaram na verificação sintática.

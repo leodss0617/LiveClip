@@ -1,0 +1,13 @@
+.git
+.env
+native.json
+data
+data-native
+models
+logs-native
+.venv*
+.local-*
+test-output
+__pycache__
+**/__pycache__
+.pytest_cache
