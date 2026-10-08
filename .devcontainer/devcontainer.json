@@ -1,8 +1,20 @@
 {
   "name": "LiveClip",
-  "forwardPorts": [8080],
-  "portsAttributes": {"8080": {"label": "LiveClip", "onAutoForward": "notify"}},
+  "forwardPorts": [
+    8080
+  ],
+  "portsAttributes": {
+    "8080": {
+      "label": "LiveClip",
+      "onAutoForward": "notify"
+    }
+  },
   "postCreateCommand": "bash .devcontainer/install.sh",
   "remoteUser": "codespace",
-  "customizations": {"codespaces": {"disableAutomaticConfiguration": true}}
+  "customizations": {
+    "codespaces": {
+      "disableAutomaticConfiguration": true
+    }
+  },
+  "postStartCommand": "bash .devcontainer/recover-network.sh"
 }
