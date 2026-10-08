@@ -1,0 +1,10 @@
+fastapi==0.142.2
+uvicorn==0.54.0
+starlette==1.7.0
+streamlink==8.6.1
+yt-dlp==2026.8.19
+faster-whisper==1.2.1
+av==16.1.0
+opencv-python-headless==4.13.0.92
+httpx[socks]==0.28.1
+onnxruntime==1.30.0

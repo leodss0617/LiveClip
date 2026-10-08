@@ -1,0 +1,20 @@
+{
+  "controls_passed": true,
+  "rating_feedback_and_clear": true,
+  "download_passed": true,
+  "mobile_emulation": [
+    390,
+    844
+  ],
+  "desktop": [
+    1280,
+    900
+  ],
+  "video_preview": {
+    "ready": 0,
+    "error": "DEMUXER_ERROR_NO_SUPPORTED_STREAMS: FFmpegDemuxer: no supported streams",
+    "width": 0,
+    "height": 0
+  },
+  "javascript_errors": []
+}

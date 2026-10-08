@@ -1,0 +1,24 @@
+{
+  "model": "qwen3:4b-instruct-2507-q4_K_M",
+  "ollama_version": "0.35.1",
+  "cpu_threads": 4,
+  "input": "Textos de teste controlados, não áudio real",
+  "results": {
+    "complete": {
+      "cuts": [
+        {
+          "start": 0,
+          "end": 60,
+          "score": 0.95,
+          "title": "O erro do portão três",
+          "reason": "O contexto inicia com o narrador indo buscar sua mãe na rodoviária, onde ela diz estar no portão três. Ele espera por vinte minutos, liga e confirma que ela está exatamente no portão três. O desfecho revela o erro: ele foi à rodoviária antiga e ela estava na nova. O final traz a piada com a mãe sugerindo mandar localização em vez de número do portão, concluindo com uma reação leve e natural."
+        }
+      ],
+      "seconds": 32.88
+    },
+    "incomplete": {
+      "cuts": [],
+      "seconds": 14.87
+    }
+  }
+}

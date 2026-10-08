@@ -1,0 +1,159 @@
+LIVECLIP — INSTALAR, INICIAR E ATUALIZAR
+Versão 0.1.12 — Windows, Linux/Zorin e Android com Termux + Ubuntu
+
+O programa usa modelos gratuitos no próprio dispositivo. Internet, espaço, memória
+RAM e energia são necessários. Um celular pode ser bem mais lento que um computador.
+Não há servidor potente gratuito contratado ou incluído neste ZIP.
+
+1. WINDOWS — PC OU NOTEBOOK
+
+1) Extraia este ZIP numa pasta fixa, por exemplo C:\LiveClip.
+   Mantenha todos os arquivos juntos; não execute dentro do ZIP.
+2) Abra essa pasta no Explorador. Clique na barra do caminho, digite powershell
+   e pressione Enter. O terminal abrirá na pasta correta.
+3) Copie e cole:
+
+   powershell -NoProfile -ExecutionPolicy Bypass -File .\instalar-comando-windows.ps1
+
+4) Feche esse terminal e abra outro PowerShell. Digite:
+
+   liveclip
+
+5) O iniciador procura o ZIP LiveClip mais recente na pasta Downloads e instala
+   dependências se necessário. Na primeira vez, Docker Desktop pode pedir WSL 2,
+   virtualização, permissão de administrador e reinício. Siga a mensagem mostrada;
+   após reiniciar, execute liveclip novamente. Não precisa pagar por IA ou API.
+6) Copie o endereço do painel e a senha exibidos. Normalmente:
+   http://127.0.0.1:8080
+7) A primeira instalação baixa modelos grandes. Aguarde os serviços; não confunda
+   download de modelo com progresso da análise de uma live.
+
+Se o comando não for encontrado, abra OUTRO terminal. Também pode usar:
+   powershell -NoProfile -ExecutionPolicy Bypass -File .\liveclip-desktop.ps1
+na pasta extraída. Não mova a pasta depois de instalar o comando. Se mover, repita
+instalar-comando-windows.ps1 na pasta nova.
+
+2. LINUX/ZORIN — PC OU NOTEBOOK
+
+1) Extraia o ZIP numa pasta fixa. Abra o gerenciador de arquivos nessa pasta e
+   escolha Abrir no terminal. A pasta precisa conter instalar-comando-linux.sh.
+2) Copie e cole:
+
+   bash instalar-comando-linux.sh
+
+3) Feche o terminal, abra outro e digite:
+
+   liveclip
+
+4) Se solicitado, informe sua senha do Linux para instalar/iniciar Docker.
+   O iniciador automático foi preparado para Ubuntu/Zorin. Outras distribuições
+   podem exigir instalação de Docker com Compose conforme seu gerenciador.
+5) Aguarde a preparação e abra o painel no endereço mostrado, normalmente:
+   http://127.0.0.1:8080
+   Use a senha exibida no terminal.
+
+Se o comando ainda não aparecer, no terminal atual execute:
+   export PATH="$HOME/.local/bin:$PATH"
+   liveclip
+
+Alternativa na pasta extraída: bash liveclip-desktop.sh
+Mantenha a pasta no lugar. Se mover, registre o comando novamente.
+
+3. CELULAR ANDROID — TERMUX + UBUNTU
+
+Estes comandos são no TERMUX, prompt ~ $, NÃO no Ubuntu root@localhost.
+Se estiver no Ubuntu, digite exit para voltar ao Termux.
+
+1) Baixe este ZIP no celular. Ele deve ficar em Download com o nome:
+   LiveClip-v0.1.0.zip
+   Esse nome é mantido para funcionar com o iniciador; a versão interna é 0.1.12.
+2) Abra o Termux e copie e cole:
+
+   termux-setup-storage
+
+3) Autorize o acesso aos arquivos quando o Android pedir. Depois execute:
+
+   pkg install -y unzip
+
+4) Para preparar e iniciar tudo, copie esta linha inteira:
+
+   unzip -p "$HOME/storage/downloads/LiveClip-v0.1.0.zip" LiveClip/liveclip-termux.sh > "$HOME/liveclip-termux.sh" && bash "$HOME/liveclip-termux.sh"
+
+5) O iniciador prepara Ubuntu, dependências, modelos e tmux. A primeira vez pode
+   demorar bastante. No fim, abra o endereço do painel mostrado, normalmente:
+   http://127.0.0.1:8080
+6) Nas próximas vezes, no Termux basta digitar:
+
+   liveclip
+
+O processo usa tmux para continuar quando você sai da tela do terminal. Isso não
+impede o Android de matar o aplicativo por falta de memória ou economia de bateria.
+Mantenha Termux com bateria sem restrições. Um modelo grande pode não caber na RAM;
+nesse caso use o computador para processar.
+
+Se aparecer ZIP não encontrado: confira o nome e a pasta Download, autorize acesso
+ao armazenamento e use o Termux. /root/LiveClip pertence ao Ubuntu; não é a pasta
+Download do Android.
+Se o serviço já estiver ativo, liveclip abre a sessão existente em vez de duplicar.
+Se um processo travar, baixe o diagnóstico no painel antes de apagar dados.
+
+4. ATUALIZAR — EM QUALQUER DISPOSITIVO
+
+1) Baixe o ZIP novo na pasta Downloads/Download; mantenha o nome começando LiveClip.
+2) Execute liveclip no terminal da plataforma (no celular, no Termux).
+3) O iniciador verifica o ZIP mais recente e reaplica os arquivos necessários.
+   Dados, senha/configuração, modelos e memória de experiências são preservados.
+   ZIP danificado ou inseguro é recusado. Leia a mensagem se a atualização falhar.
+
+5. COMO O MONITORAMENTO FUNCIONA
+
+- Cole um link público de YouTube, Kick ou Twitch no painel. Até 15 horas de entrada.
+- A cada 20 minutos de VÍDEO RECEBIDO, um bloco é liberado para avaliação.
+  Não são 20 minutos de relógio nem promessa de terminar a análise nesse prazo.
+- O sistema examina o bloco em trechos menores com contexto sobreposto para evitar
+  enviar todo o texto de 20 minutos de uma vez à IA no celular.
+- Não há obrigação de gerar cortes: o bloco pode render vários momentos ou nenhum.
+- Quando a transmissão termina, a sobra menor que 20 minutos também é analisada.
+- Situações sem começo ou desfecho aguardam contexto. Um limite de bloco não conta
+  como final da história. Música detectada em andamento não vira corte parcial.
+- Histórias/reação: até cinco minutos; evento musical: até dez minutos. Música sem
+  fronteiras conhecidas ou maior que o limite é descartada em vez de truncada.
+- Cancelar interrompe captura/análise/edição; os cortes já prontos são preservados.
+  Tarefas encerradas têm opção Excluir tarefa.
+
+6. NOTAS E BASE DE CONHECIMENTO
+
+Interesse, contexto e desfecho recebem notas de 0 a 10, com justificativa.
+Só gera candidato com média >=7 e todos esses critérios >=7. Nota baixa não gera
+arquivo. Detecção de música sozinha não é prova de que o momento é interessante.
+A avaliação de uma música instrumental pode ser conservadora porque a IA textual
+não assiste nem ouve a apresentação como uma pessoa.
+
+Após editar, há verificação técnica separada: formato vertical, duração, áudio,
+câmera e legendas. A nota exibida limita a nota editorial pela nota técnica quando
+esta existe. 10/10 significa uma avaliação estimada excelente com verificações
+passando, não garantia de perfeição, direitos musicais ou viralização.
+Confira a prévia antes de postar.
+
+A base local guarda até 1000 registros de análises, edições e erros, e aproveita até
+8 avaliações recentes suas como exemplos nas próximas seleções. Depois de assistir,
+dê sua nota de 0 a 10 e uma observação, e clique Ensinar à seleção. Você pode corrigir
+sua avaliação depois. Notas da própria IA não viram prova de qualidade confirmada.
+As experiências são recuperadas no contexto da IA: não treina pesos, não fica
+automaticamente mais inteligente a cada live e não garante melhora contínua.
+
+Apagar memória no painel limpa as experiências e preferências; mantém vídeos e
+notas exibidas nos cortes. Um job já iniciado pode ter lido a memória anterior;
+a limpeza vale para os próximos jobs.
+
+7. ERROS E SUPORTE
+
+O painel mostra etapa atual, avanço quando mensurável, nota dos candidatos e
+histórico. Baixar diagnóstico inclui informações para investigar falhas locais.
+Se a IA falhar, a análise pausa/repetirá sem marcar o trecho como concluído.
+Links privados, removidos, protegidos ou bloqueados pela plataforma podem falhar.
+A nota é uma estimativa; nem toda live contém um bom corte.
+
+Validação desta versão: testes automatizados em Linux, classificação de áudio real
+com fixtures e testes do painel. Não equivale a teste no seu Windows ou Android,
+e não comprova o fluxo completo de todos os links de todas as plataformas.

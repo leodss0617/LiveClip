@@ -1,0 +1,11 @@
+.env
+native.json
+data/
+models/
+logs-native/
+.venv*/
+__pycache__/
+.pytest_cache/
+test-output/
+liveclip/assets/yamnet/yamnet.onnx
+*.download

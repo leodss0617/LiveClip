@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="pt-BR">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="theme-color" content="#0b0d15"><title>LiveClip — Estúdio de cortes</title><link rel="icon" href="/static/icon.svg" type="image/svg+xml"><link rel="stylesheet" href="/static/style.css"><script src="/static/app.js" defer></script></head>
+<body>
+<div id="login" class="login-wrap">
+  <form id="login-form" class="login-card">
+    <img src="/static/icon.svg" width="48" height="48" alt="">
+    <h1>Seu estúdio de cortes.</h1><p>Entre para monitorar lives e acessar seus vídeos.</p>
+    <label for="password">Senha do estúdio</label><input id="password" type="password" autocomplete="current-password" minlength="12" required placeholder="Senha definida na instalação">
+    <button type="submit" class="primary">Entrar</button><p id="login-error" class="error" role="alert"></p>
+  </form>
+</div>
+<div id="studio" hidden>
+  <header><a class="brand" href="/"><img src="/static/icon.svg" width="32" height="32" alt="">LiveClip<span class="brand-tag">ESTÚDIO</span></a><div class="header-right"><span id="connection" class="connection">Conectando</span><button id="refresh" class="quiet" aria-label="Atualizar painel">Atualizar</button><button id="logout" class="quiet">Sair</button></div></header>
+  <main>
+    <div class="title-row"><div><p class="eyebrow">MONITORAMENTO AUTOMÁTICO</p><h1>Da live ao corte.</h1></div><span class="format-tag">9:16 · MP4 · LEGENDAS</span></div>
+    <section class="source-panel" aria-labelledby="source-title">
+      <div class="section-top"><h2 id="source-title">Adicionar live ou gravação</h2><div class="platforms"><span>YouTube</span><span>Kick</span><span>Twitch</span></div></div>
+      <form id="source-form"><label class="sr-only" for="url">Link público da live ou gravação</label><input id="url" type="url" inputmode="url" placeholder="Cole o link da live ou gravação" required><button id="start" type="submit" class="primary">Processar link</button></form>
+      <p class="hint">Fechar esta página mantém a tarefa no dispositivo que processa a live. Ele precisa ficar ligado. Uma live ou gravação por vez, até 15 horas.</p>
+      <div id="model-notice" class="notice" hidden>A IA de seleção ainda não está disponível. Verifique os serviços no servidor; a captura pode começar enquanto os modelos carregam.</div>
+    </section>
+    <section class="runtime-panel" aria-label="Diagnóstico do estúdio"><span id="runtime-ai">IA: verificando</span><span id="runtime-worker">Processamento: verificando</span><span id="runtime-profile">Modelos locais</span><span id="runtime-version">Versão</span></section>
+    <section class="runtime-panel" aria-label="Base de conhecimento"><h2>Aprendizado local</h2><p id="knowledge-summary">Carregando experiências…</p><p>Avaliação a cada 20 minutos recebidos, sem corte obrigatório. Só aprova notas a partir de 7/10 com contexto e desfecho. Sua avaliação dos cortes orienta as próximas seleções.</p><button id="clear-knowledge" class="quiet">Apagar memória</button></section>
+    <div id="message" class="notice" role="status" hidden></div>
+    <section aria-labelledby="session-title"><div class="section-heading"><h2 id="session-title">Transmissões</h2><span id="disk" class="muted"></span></div><div id="sessions"><div class="empty compact"><h3>Nenhuma transmissão iniciada</h3><p>Cole um link acima para começar o monitoramento.</p></div></div></section>
+    <section aria-labelledby="clips-title"><div class="section-heading"><div class="heading-inline"><h2 id="clips-title">Seus cortes</h2><span id="clip-count" class="count">0</span></div><span class="muted">Prontos para baixar</span></div><div id="clips" class="clip-grid"><div class="empty"><div class="empty-icon" aria-hidden="true">✂</div><h3>Os melhores momentos ficam aqui</h3><p>Após receber vídeo suficiente, a IA analisa o contexto e prepara os cortes selecionados. O primeiro resultado pode levar vários minutos.</p></div></div></section>
+    <footer>LiveClip <span>Seleção editorial por IA. O potencial de engajamento não garante viralização.</span></footer>
+  </main>
+</div>
+<dialog id="preview"><div class="preview-top"><h2 id="preview-title">Prévia</h2><button id="close-preview" class="quiet">Fechar</button></div><video id="preview-video" controls playsinline preload="metadata"></video><p id="preview-error" class="notice" hidden>Este navegador não conseguiu reproduzir a prévia. Baixe o MP4 e abra no reprodutor do seu dispositivo.</p><a id="preview-download" class="primary download">Baixar MP4</a></dialog>
+</body></html>

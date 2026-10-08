@@ -1,0 +1,62 @@
+services:
+  ollama:
+    image: ollama/ollama:0.17.7
+    restart: unless-stopped
+    volumes:
+      - ollama-models:/root/.ollama
+    healthcheck:
+      test: ["CMD", "ollama", "list"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 15s
+  model-setup:
+    image: ollama/ollama:0.17.7
+    environment:
+      OLLAMA_HOST: http://ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3:4b-instruct-2507-q4_K_M}
+    entrypoint: ["/bin/sh", "-c"]
+    command: ['ollama pull "$${OLLAMA_MODEL}"']
+    depends_on:
+      ollama:
+        condition: service_healthy
+    restart: on-failure
+  studio:
+    build: .
+    restart: unless-stopped
+    stop_grace_period: 45s
+    environment:
+      LIVECLIP_PASSWORD: ${LIVECLIP_PASSWORD:?Execute iniciar.sh ou iniciar.ps1 primeiro}
+      OLLAMA_URL: http://ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen3:4b-instruct-2507-q4_K_M}
+      WHISPER_MODEL: ${WHISPER_MODEL:-small}
+      CPU_THREADS: ${CPU_THREADS:-4}
+      MIN_FREE_GB: ${MIN_FREE_GB:-2}
+      MAX_DATA_GB: ${MAX_DATA_GB:-20}
+      SECURE_COOKIE: ${SECURE_COOKIE:-false}
+    volumes:
+      - studio-data:/data
+    ports:
+      - "${BIND_ADDRESS:-127.0.0.1}:8080:8080"
+    depends_on:
+      model-setup:
+        condition: service_completed_successfully
+  https:
+    image: caddy:2.10.2
+    profiles: ["cloud"]
+    restart: unless-stopped
+    environment:
+      LIVECLIP_DOMAIN: ${LIVECLIP_DOMAIN:-localhost}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy-data:/data
+      - caddy-config:/config
+    ports:
+      - "80:80"
+      - "443:443"
+    depends_on: [studio]
+volumes:
+  ollama-models:
+  studio-data:
+  caddy-data:
+  caddy-config:
