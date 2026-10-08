@@ -22,6 +22,14 @@
     </section>
     <section class="runtime-panel" aria-label="Diagnóstico do estúdio"><span id="runtime-ai">IA: verificando</span><span id="runtime-worker">Processamento: verificando</span><span id="runtime-profile">Modelos locais</span><span id="runtime-version">Versão</span></section>
     <section class="runtime-panel" aria-label="Base de conhecimento"><h2>Aprendizado local</h2><p id="knowledge-summary">Carregando experiências…</p><p>Avaliação a cada 20 minutos recebidos, sem corte obrigatório. Só aprova notas a partir de 7/10 com contexto e desfecho. Sua avaliação dos cortes orienta as próximas seleções.</p><button id="clear-knowledge" class="quiet">Apagar memória</button></section>
+    <section id="cloud-panel" class="source-panel" hidden aria-label="Máquina virtual">
+      <h2>Máquina virtual</h2><p id="cloud-time">Consultando…</p>
+      <p class="hint">Estimativa baseada no saldo informado e no tempo observado com o painel em execução. Não inclui outras máquinas, preparação ou tempo com o serviço parado. Não é o saldo oficial. Armazenamento continua contando com a máquina parada.</p>
+      <form id="cloud-balance"><label for="cloud-hours">Horas reais restantes (consulte no GitHub)</label><input id="cloud-hours" type="number" min="0" max="10000" step="0.01" required><button class="quiet">Atualizar saldo estimado</button></form>
+      <p><a href="https://github.com/settings/billing" target="_blank" rel="noopener noreferrer">Ver cota e renovação no GitHub</a></p>
+      <button id="cloud-stop" class="quiet">Parar máquina virtual</button><p id="cloud-auth" class="hint"></p>
+      <a href="https://github.com/codespaces" target="_blank" rel="noopener noreferrer">Gerenciar ou ligar novamente</a>
+    </section>
     <div id="message" class="notice" role="status" hidden></div>
     <section aria-labelledby="session-title"><div class="section-heading"><h2 id="session-title">Transmissões</h2><span id="disk" class="muted"></span></div><div id="sessions"><div class="empty compact"><h3>Nenhuma transmissão iniciada</h3><p>Cole um link acima para começar o monitoramento.</p></div></div></section>
     <section aria-labelledby="clips-title"><div class="section-heading"><div class="heading-inline"><h2 id="clips-title">Seus cortes</h2><span id="clip-count" class="count">0</span></div><span class="muted">Prontos para baixar</span></div><div id="clips" class="clip-grid"><div class="empty"><div class="empty-icon" aria-hidden="true">✂</div><h3>Os melhores momentos ficam aqui</h3><p>Após receber vídeo suficiente, a IA analisa o contexto e prepara os cortes selecionados. O primeiro resultado pode levar vários minutos.</p></div></div></section>

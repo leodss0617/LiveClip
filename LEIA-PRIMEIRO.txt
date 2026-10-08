@@ -157,3 +157,11 @@ A nota é uma estimativa; nem toda live contém um bom corte.
 Validação desta versão: testes automatizados em Linux, classificação de áudio real
 com fixtures e testes do painel. Não equivale a teste no seu Windows ou Android,
 e não comprova o fluxo completo de todos os links de todas as plataformas.
+
+CONTROLE DA MÁQUINA GITHUB (0.1.13)
+No painel, a seção Máquina virtual permite informar horas reais restantes e
+acompanhar uma estimativa regressiva. O saldo oficial e a renovação ficam no
+GitHub. A estimativa não mede armazenamento nem uso de outras máquinas.
+Para autorizar o botão Parar máquina virtual, siga USAR-NO-GITHUB.md.
+Após a parada, abra github.com/codespaces para ligar novamente.
+Para receber esta atualização no terminal do Codespace: liveclip atualizar

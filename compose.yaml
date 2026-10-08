@@ -34,6 +34,8 @@ services:
       MIN_FREE_GB: ${MIN_FREE_GB:-2}
       MAX_DATA_GB: ${MAX_DATA_GB:-20}
       SECURE_COOKIE: ${SECURE_COOKIE:-false}
+      CODESPACE_NAME: ${CODESPACE_NAME:-}
+      LIVECLIP_CODESPACES_TOKEN: ${LIVECLIP_CODESPACES_TOKEN:-}
     volumes:
       - studio-data:/data
     ports:

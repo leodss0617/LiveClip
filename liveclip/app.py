@@ -22,6 +22,7 @@ from .settings import Settings
 from .store import Store
 from .version import VERSION
 from .worker import Engine
+from .cloud import CloudMeter, stop_codespace
 
 
 class Login(BaseModel):
@@ -37,11 +38,16 @@ class NewSession(BaseModel):
     url: str = Field(max_length=2048)
 
 
+class CloudBalance(BaseModel):
+    hours: float = Field(ge=0, le=10000, strict=True, allow_inf_nan=False)
+
+
 def create_app(settings=None):
     settings = settings or Settings()
     logging.basicConfig(level=logging.INFO)
     store = Store(settings.data / "liveclip.db")
     engine = Engine(store, settings)
+    cloud = CloudMeter(settings.data)
     secret_path = settings.data / "auth-secret"
     if not secret_path.exists():
         secret_path.write_bytes(secrets.token_bytes(32))
@@ -149,6 +155,28 @@ def create_app(settings=None):
         response = JSONResponse({"ok": True})
         response.delete_cookie("liveclip")
         return response
+
+    @app.get('/api/cloud')
+    def cloud_status():
+        return cloud.status()
+
+    @app.post('/api/cloud/balance')
+    def cloud_balance(body: CloudBalance):
+        cloud.set_hours(body.hours)
+        return cloud.status()
+
+    @app.post('/api/cloud/stop')
+    def cloud_stop():
+        with owned_operation():
+            if any(s['status'] in ('queued', 'waiting', 'monitoring', 'reconnecting', 'finishing', 'stopping') for s in store.sessions()):
+                raise HTTPException(409, 'Cancele as tarefas ativas e aguarde o encerramento antes de parar a máquina.')
+            if any(c['status'] in ('queued', 'rendering') for c in store.clips(complete=True)):
+                raise HTTPException(409, 'Há cortes aguardando edição. Cancele a tarefa ou aguarde os cortes antes de parar.')
+            cloud.status()
+            try:
+                return stop_codespace()
+            except ValueError as e:
+                raise HTTPException(409, str(e)) from None
 
     @app.get("/api/status")
     def status():

@@ -108,3 +108,12 @@ isso não demonstra interesse editorial. A memória recupera experiências e fee
 não treina pesos nem garante que cada nova live melhore o resultado.
 
 Guia de instalação, ativação e atualização incluído na raiz: LEIA-PRIMEIRO.txt.
+
+## 0.1.13 — Controle de Codespaces
+
+- Botão de parada autenticado, alvo fixo na máquina atual; confirmação no painel. Bloqueia tarefas ativas e cortes pendentes. Solicita POST /user/codespaces/{name}/stop, exige resposta 200. Erro de permissão/rede não indica sucesso.
+- Autorização por segredo LIVECLIP_CODESPACES_TOKEN, fine-grained restrito a LiveClip e Codespaces lifecycle admin write. Sem segredo, botão desabilitado e alternativa pelo GitHub. Token não é retornado ao navegador nem incluído no repositório.
+- Contador de saldo manual persistido, descontando tempo monotônico observado pelo processo. Sem renovação automática nem alegação de saldo oficial. Não mede custos de armazenamento, outras máquinas, construção ou intervalos de serviço parado.
+- 152 testes automatizados passaram, incluindo persistência, autenticação, validação, estados ativos, rejeição GitHub e timeout. JavaScript validado por node --check.
+- Teste de navegador local: formulário, contagem regressiva, parada simulada e ausência de transbordamento em 390x844 e 1280x900; zero erros JS. Não é teste físico em Android/Windows.
+- A parada de Codespace real não foi executada durante a validação. A primeira construção/remota e o processamento de vídeos reais continuam dependendo de verificação no ambiente do usuário.
