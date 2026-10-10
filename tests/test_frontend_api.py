@@ -34,6 +34,12 @@ async function fetch(url, options){return response;}
  response={ok:false,status:401,json:async()=>({detail:'Entre para continuar.'})};
  await assert.rejects(api('/sessions'), /Entre para continuar/);
  assert.equal(shown,1);
+ for(const path of ['/sessions','/clips']){
+  for(const items of [[],[{id:'existing-item'}]]){
+   response={ok:true,status:200,json:async()=>items};
+   assert.deepEqual(await api(path),items);
+  }
+ }
 })().catch(e=>{console.error(e);process.exitCode=1;});
 '''
     result = subprocess.run([node, '-e', script], capture_output=True, text=True)
