@@ -20,3 +20,19 @@ O token Bearer do serviço, gerado em `~/.editorclipes-cloud/token`, **não subs
 - Aplicativo Android ainda não compilado/testado nessa branch
 - Os trabalhos e vídeos não são armazenados em nuvem permanente e podem se perder se o Codespaces for excluído
 - Não usar em produção nem substituir o APK instalado até concluir testes de compilação, fluxo de autenticação e envio/download fim a fim
+
+## Painel no navegador do celular (novo, experimental)
+
+A pasta `cloud/mobile.html` acrescenta uma interface Web adaptada ao celular, servida pela rota `/` do servidor Python. Os endpoints permanecem autenticados com Bearer.
+
+1. No Codespaces, execute a versao atualizada do servidor da branch de desenvolvimento.
+2. Em **Ports**, confirme a porta **18755** e **Private**.
+3. Use a opcao do VS Code **Open in Browser** para verificar a URL `https://NOME-18755.app.github.dev`.
+4. No navegador do celular, entre na **mesma conta GitHub** e abra a URL privada. O GitHub pode solicitar login.
+5. Na pagina do EditorClipesDSS, insira **apenas no proprio navegador** o conteudo de `~/.editorclipes-cloud/token`, gerado pelo servidor. Nao copie esse codigo para chats e nao salve em repositorios.
+6. Selecione um MP4 de ate 100 MB, envie e aguarde a renderizacao.
+7. Baixe o arquivo final. O ID do trabalho permite consulta posterior enquanto o Codespaces existir.
+
+O painel guarda o codigo somente em memoria durante a vida da pagina, nao em localStorage. A interface do navegador depende da autenticação privada do GitHub e **nao exige token GitHub manual no JavaScript**. Nao mude a porta para Public.
+
+O cliente Kotlin e esse painel do navegador sao alternativas experimentais distintas. O painel web pode funcionar no celular antes de um APK novo; isso **nao comprova** que o cliente Kotlin esteja operacional.
