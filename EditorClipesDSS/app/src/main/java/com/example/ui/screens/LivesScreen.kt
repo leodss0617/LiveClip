@@ -228,11 +228,12 @@ internal fun LivesScreen(
         BackHandler { onExpand(null) }
         BoxWithConstraints(Modifier.fillMaxSize().padding(8.dp)) {
             if (maxWidth > maxHeight) {
+                val chatWidth = (maxWidth * 0.42f).coerceAtMost(360.dp)
                 Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     StreamVideo(activePlayer, Modifier.weight(1f).fillMaxHeight(), controls = true)
                     Column(
                         modifier = Modifier
-                            .width(if (expandedChatVisible) (maxWidth * 0.42f).coerceAtMost(360.dp) else 44.dp)
+                            .width(if (expandedChatVisible) chatWidth else 44.dp)
                             .fillMaxHeight(),
                         verticalArrangement = Arrangement.spacedBy(4.dp),
                     ) {
