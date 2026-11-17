@@ -50,7 +50,9 @@ class CloudServiceTest(unittest.TestCase):
                 self.assertEqual(blocked.exception.code, 401)
                 blocked.exception.close()
                 token = (root / "work" / "token").read_text().strip()
-                headers = {"Authorization": "Bearer " + token}
+                headers = {"X-EditorClipes-Token": token}
+                # O cabeçalho usado pelo navegador nao deve conflitar
+                # com a autenticacao do proxy privado do GitHub.
                 with self.assertRaises(HTTPError) as exc:
                     urlopen(base + "/health", timeout=5)
                 self.assertEqual(exc.exception.code, 401)
