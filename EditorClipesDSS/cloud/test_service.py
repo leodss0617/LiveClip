@@ -33,7 +33,9 @@ class CloudServiceTest(unittest.TestCase):
                             with urlopen(Request(base + "/health"), timeout=1):
                                 pass
                         except HTTPError as exc:
-                            if exc.code == 401:
+                            code = exc.code
+                            exc.close()
+                            if code == 401:
                                 break
                         except OSError:
                             pass
