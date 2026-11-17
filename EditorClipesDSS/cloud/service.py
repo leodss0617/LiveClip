@@ -64,14 +64,19 @@ def process_jobs():
 
 
 def make_handler(token):
+    sessions = {}
+    sessions_lock = threading.Lock()
+
     class Handler(BaseHTTPRequestHandler):
         server_version = "EditorClipesCloud/0.1"
 
-        def reply(self, status, payload):
+        def reply(self, status, payload, cookie=None):
             data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
             self.send_response(status)
             self.send_header("Content-Type", "application/json; charset=utf-8")
             self.send_header("X-EditorClipes-Service", "cloud-python")
+            if cookie is not None:
+                self.send_header("Set-Cookie", cookie)
             self.send_header("Content-Length", str(len(data)))
             self.send_header("Cache-Control", "no-store")
             self.end_headers()
@@ -81,7 +86,19 @@ def make_handler(token):
             # Header separado para nao conflitar com o proxy do GitHub.
             given = self.headers.get("X-EditorClipes-Token", "")
             legacy = self.headers.get("Authorization", "")
-            if not (hmac.compare_digest(given, token) or
+            cookie_string = self.headers.get("Cookie", "")
+            session_value = ""
+            for part in cookie_string.split(";"):
+                key, separator, value = part.strip().partition("=")
+                if separator and key == "editorclipes_session":
+                    session_value = value
+                    break
+            session_valid = False
+            if session_value:
+                with sessions_lock:
+                    expiration = sessions.get(session_value)
+                    session_valid = expiration is not None and expiration > time.monotonic()
+            if not (session_valid or hmac.compare_digest(given, token) or
                     hmac.compare_digest(legacy, "Bearer " + token)):
                 self.reply(401, {"error": "Não autorizado"})
                 return False
@@ -142,6 +159,29 @@ def make_handler(token):
             self.reply(404, {"error": "Não encontrado"})
 
         def do_POST(self):
+            if urlsplit(self.path).path == "/session":
+                try:
+                    size = int(self.headers.get("Content-Length", "0"))
+                except ValueError:
+                    size = 0
+                if size < 1 or size > 256:
+                    self.reply(400, {"error": "Tamanho de codigo invalido"})
+                    return
+                provided = self.rfile.read(size).decode("utf-8", errors="replace").strip()
+                if not hmac.compare_digest(provided, token):
+                    self.reply(401, {"error": "Codigo incorreto"})
+                    return
+                session_id = secrets.token_urlsafe(32)
+                now = time.monotonic()
+                with sessions_lock:
+                    for key, expires in list(sessions.items()):
+                        if expires <= now:
+                            sessions.pop(key, None)
+                    sessions[session_id] = now + 3600
+                cookie = ("editorclipes_session=" + session_id +
+                          "; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=3600")
+                self.reply(200, {"status": "ok", "service": "EditorClipesDSS Cloud"}, cookie)
+                return
             if not self.authorize():
                 return
             if urlsplit(self.path).path != "/jobs":
