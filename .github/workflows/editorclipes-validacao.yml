@@ -30,3 +30,7 @@ jobs:
         run: |
           ffmpeg -hide_banner -loglevel error -f lavfi -i 'testsrc2=size=360x640:rate=15' -t 2 -c:v libx264 -preset ultrafast -pix_fmt yuv420p -y /tmp/teste.mp4
           test "$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0 /tmp/teste.mp4)" = "360,640"
+
+      - name: Testar serviço remoto autenticado e renderização
+        working-directory: EditorClipesDSS
+        run: python -m unittest discover -s cloud -p 'test_*.py' -v
