@@ -33,6 +33,7 @@ fun ConfiguracoesScreen(onOpenEditor: () -> Unit) {
     var cloudUrl by remember { mutableStateOf(cloudPrefs.getString("url", "").orEmpty()) }
     // Token em memoria apenas: nao salvar segredos nas preferencias comuns.
     var cloudToken by remember { mutableStateOf("") }
+    var githubPortToken by remember { mutableStateOf("") }
     var cloudStatus by remember { mutableStateOf("Nao conectado") }
     var cloudBusy by remember { mutableStateOf(false) }
     var cloudJobId by remember { mutableStateOf(cloudPrefs.getString("job_id", "").orEmpty()) }
@@ -42,7 +43,7 @@ fun ConfiguracoesScreen(onOpenEditor: () -> Unit) {
         cloudBusy = true
         scope.launch {
             try {
-                val client = CloudVideoClient(context, cloudUrl, cloudToken)
+                val client = CloudVideoClient(context, cloudUrl, cloudToken, githubPortToken)
                 action(client)
             } catch (error: Exception) {
                 cloudStatus = error.message ?: "Falha de conexao"
@@ -138,6 +139,20 @@ fun ConfiguracoesScreen(onOpenEditor: () -> Unit) {
                 singleLine = true,
                 visualTransformation = PasswordVisualTransformation(),
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            )
+            OutlinedTextField(
+                value = githubPortToken,
+                onValueChange = { githubPortToken = it.trim() },
+                label = { Text("Credencial GitHub (opcional, nao salva)") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                visualTransformation = PasswordVisualTransformation(),
+                keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
+            )
+            Text(
+                "Nunca compartilhe credenciais. A conexao com uma porta privada " +
+                    "ainda depende de uma autenticacao GitHub validada.",
+                style = MaterialTheme.typography.bodySmall,
             )
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(
