@@ -23,6 +23,7 @@ class CloudVideoClient(
     private val context: Context,
     endpoint: String,
     private val token: String,
+    private val githubToken: String = "",
 ) {
     private val root = endpoint.trim().trimEnd('/')
 
@@ -31,6 +32,10 @@ class CloudVideoClient(
             "Use somente endereco HTTPS para proteger o codigo de acesso."
         }
         require(token.isNotBlank()) { "Informe o codigo privado do servidor." }
+        val host = java.net.URI(root).host.orEmpty().lowercase()
+        require(host.endsWith(".app.github.dev") && host.length > ".app.github.dev".length) {
+            "Informe somente o endereco privado da porta GitHub Codespaces."
+        }
     }
 
     private fun connect(path: String, method: String = "GET"): HttpURLConnection {
@@ -41,6 +46,9 @@ class CloudVideoClient(
         connection.readTimeout = 60000
         connection.instanceFollowRedirects = false
         connection.setRequestProperty("Authorization", "Bearer " + token)
+        if (githubToken.isNotBlank()) {
+            connection.setRequestProperty("X-Github-Token", githubToken)
+        }
         connection.setRequestProperty("Accept", "application/json")
         return connection
     }
