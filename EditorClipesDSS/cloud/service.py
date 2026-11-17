@@ -77,8 +77,11 @@ def make_handler(token):
             self.wfile.write(data)
 
         def authorize(self):
-            given = self.headers.get("Authorization", "")
-            if not hmac.compare_digest(given, "Bearer " + token):
+            # Header separado para nao conflitar com o proxy do GitHub.
+            given = self.headers.get("X-EditorClipes-Token", "")
+            legacy = self.headers.get("Authorization", "")
+            if not (hmac.compare_digest(given, token) or
+                    hmac.compare_digest(legacy, "Bearer " + token)):
                 self.reply(401, {"error": "Não autorizado"})
                 return False
             return True
