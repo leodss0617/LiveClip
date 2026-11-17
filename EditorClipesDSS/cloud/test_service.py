@@ -40,6 +40,15 @@ class CloudServiceTest(unittest.TestCase):
                         except OSError:
                             pass
                     time.sleep(.1)
+                # Painel visivel no navegador, mas APIs continuam protegidas.
+                with urlopen(base + "/", timeout=5) as page:
+                    self.assertEqual(page.status, 200)
+                    self.assertIn(b"EditorClipesDSS Cloud", page.read())
+                    self.assertIn("no-store", page.headers.get("Cache-Control", ""))
+                with self.assertRaises(HTTPError) as blocked:
+                    urlopen(base + "/jobs", timeout=5)
+                self.assertEqual(blocked.exception.code, 401)
+                blocked.exception.close()
                 token = (root / "work" / "token").read_text().strip()
                 headers = {"Authorization": "Bearer " + token}
                 with self.assertRaises(HTTPError) as exc:
