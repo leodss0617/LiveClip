@@ -1,0 +1,32 @@
+name: EditorClipesDSS - verificar codigo e renderizacao
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'EditorClipesDSS/**'
+      - '.github/workflows/editorclipes-validacao.yml'
+  workflow_dispatch:
+jobs:
+  verificar-linux:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - name: Baixar repositorio
+        uses: actions/checkout@v4
+      - name: Preparar Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Instalar FFmpeg
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y ffmpeg
+      - name: Validar sintaxe Python
+        run: python -m compileall -q EditorClipesDSS/bridge
+      - name: Rodar testes do backend
+        working-directory: EditorClipesDSS
+        run: python -m unittest discover -s bridge -p 'test_*.py' -q
+      - name: Testar renderizacao MP4 9x16
+        run: |
+          ffmpeg -hide_banner -loglevel error -f lavfi -i 'testsrc2=size=360x640:rate=15' -t 2 -c:v libx264 -preset ultrafast -pix_fmt yuv420p -y /tmp/teste.mp4
+          test "$(ffprobe -v error -select_streams v:0 -show_entries stream=width,height -of csv=p=0 /tmp/teste.mp4)" = "360,640"
