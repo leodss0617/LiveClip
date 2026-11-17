@@ -1,0 +1,143 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="referrer" content="no-referrer">
+<title>EditorClipesDSS Cloud</title>
+<style>
+:root{color-scheme:dark;font:16px/1.5 system-ui,-apple-system,Segoe UI,sans-serif;background:#0b1221;color:#eaf0fc}
+*{box-sizing:border-box}
+body{margin:0;padding:20px 14px;min-height:100vh;background:radial-gradient(circle at 100% 0%,#182c4c 0%,#0b1221 55%)}
+main{max-width:560px;margin:20px auto}.brand{display:flex;align-items:center;gap:12px;margin-bottom:22px}
+.logo{display:grid;place-items:center;background:linear-gradient(145deg,#39b9ff,#8a62ff);font-weight:900;color:#08111f;width:50px;height:50px;border-radius:14px;font-size:22px}
+h1{font-size:1.5rem;margin:0}small,.muted{color:#a7b6d2}h2{font-size:1.05rem}
+section{padding:19px;margin-bottom:16px;background:#15223a;border:1px solid #2a3c58;border-radius:18px}
+label{display:block;font-weight:600;margin:14px 0 7px}
+input{width:100%;min-height:48px;border-radius:10px;border:1px solid #516486;background:#081525;color:#fff;padding:12px;font:inherit}
+input[type=file]{padding:9px}button{background:#52affc;color:#05101e;font:700 1rem system-ui;border:0;border-radius:10px;padding:14px;min-height:48px;cursor:pointer;width:100%;margin-top:15px}
+button.secondary{background:#273d60;color:white}
+button:disabled{opacity:.55;cursor:not-allowed}
+#status{white-space:pre-wrap;overflow-wrap:anywhere;margin-top:14px;padding:12px;background:#09162a;border-radius:10px}
+progress{width:100%;height:12px;margin-top:12px;accent-color:#52affc}
+.help{line-height:1.55}a{color:#8fd3ff}kbd{font-size:0.85rem;background:#263754;padding:2px 5px;border-radius:4px}
+</style>
+</head>
+<body>
+<main>
+<header class="brand"><div class="logo">DSS</div><div><h1>EditorClipesDSS Cloud</h1><small>Processamento de vídeos • GitHub Codespaces</small></div></header>
+<section>
+<h2>1. Acesso privado</h2>
+<p class="muted">Esta página deve ser aberta pela URL da porta <strong>18755 Private</strong>, com sua conta GitHub conectada. O código abaixo é <strong>o código do serviço</strong>, não sua senha GitHub.</p>
+<label for="token">Código do serviço remoto</label>
+<input id="token" type="password" autocomplete="off" placeholder="Insira somente no seu dispositivo">
+<button id="verify">Testar conexão</button>
+</section>
+<section>
+<h2>2. Enviar vídeo</h2>
+<label for="video">Escolha um MP4 (até 100 MB)</label>
+<input id="video" type="file" accept="video/mp4,.mp4">
+<button id="send">Enviar e renderizar</button>
+<progress id="progress" max="100" value="0" hidden></progress>
+<div id="status" role="status" aria-live="polite">Aguardando envio.</div>
+<button id="download" hidden>Baixar MP4 concluído</button>
+</section>
+<section class="help">
+<h2>3. Recuperar trabalho</h2>
+<p class="muted">Se sair da página, guarde o identificador do trabalho. Os arquivos continuam no Codespaces enquanto ele existir.</p>
+<label for="job">Identificador do trabalho</label>
+<input id="job" autocomplete="off" spellcheck="false" placeholder="32 caracteres">
+<button id="check" class="secondary">Consultar e recuperar</button>
+<p class="muted">Esta versão faz conversão 9:16. Os cortes inteligentes e as legendas ainda não estão integrados.</p>
+</section>
+</main>
+<script>
+(() => {
+"use strict";
+const $ = id => document.getElementById(id);
+const status = message => { $("status").textContent = message; };
+let activeJob = "";
+let pollHandle = null;
+const token = () => $("token").value.trim();
+const auth = () => {
+  if (!token()) throw new Error("Informe o código do serviço.");
+  return {"Authorization": "Bearer " + token()};
+};
+function fail(error) { status("Erro: " + (error?.message || String(error))); }
+async function request(path) {
+  const res = await fetch(path, {headers:auth(),cache:"no-store",credentials:"same-origin",redirect:"error"});
+  if (!res.ok) throw new Error("HTTP " + res.status + ". Verifique sua conexão privada e o código.");
+  if (!(res.headers.get("content-type") || "").includes("application/json")) throw new Error("O GitHub pode estar solicitando login no navegador.");
+  return await res.json();
+}
+$("verify").onclick = async () => {
+  try { status("Testando conexão…"); const response = await request("/health"); status(response.status === "ok" ? "Servidor online e autenticado!" : "Resposta inesperada."); } catch(e){fail(e);}
+};
+const messages = {queued:"Na fila…",running:"Renderizando vídeo…",done:"Vídeo pronto para baixar!",error:"Falha no processamento."};
+async function refresh() {
+  if (!activeJob) return;
+  try {
+    const job = await request("/jobs/" + activeJob);
+    status((messages[job.status] || job.status) + (job.error ? "\n" + job.error : "") + "\nID: " + activeJob);
+    $("download").hidden = job.status !== "done";
+    if (job.status === "queued" || job.status === "running") {
+      pollHandle = setTimeout(refresh, 3000);
+    }
+  } catch(e) {fail(e);}
+}
+function watch(id) {
+  clearTimeout(pollHandle);
+  activeJob = id;
+  $("job").value = id;
+  $("download").hidden = true;
+  refresh();
+}
+$("check").onclick = () => {
+  const id = $("job").value.trim();
+  if (!/^[0-9a-f]{32}$/.test(id)) {status("Informe um ID de trabalho válido.");return;}
+  watch(id);
+};
+$("send").onclick = () => {
+  try {
+    const file = $("video").files[0];
+    if (!file) throw new Error("Escolha um arquivo MP4.");
+    if (file.size <= 0 || file.size > 100 * 1024 * 1024) throw new Error("O vídeo precisa ter até 100 MB.");
+    const headers = auth();
+    const request = new XMLHttpRequest();
+    request.open("POST", "/jobs");
+    request.withCredentials = true;
+    request.setRequestHeader("Authorization", headers.Authorization);
+    request.setRequestHeader("Content-Type", "video/mp4");
+    $("send").disabled = true;
+    $("progress").hidden = false;
+    $("progress").value = 0;
+    status("Enviando vídeo…");
+    request.upload.onprogress = e => {if(e.lengthComputable){$("progress").value = Math.floor(100*e.loaded/e.total);status("Enviando: " + $("progress").value + "%");}};
+    request.onload = () => {
+      $("send").disabled = false;
+      if(request.status !== 202){status("Erro no envio: HTTP " + request.status);return;}
+      try { const response = JSON.parse(request.responseText);watch(response.id);}catch(e){fail(e);}
+    };
+    request.onerror = () => {$("send").disabled=false;status("Erro de rede no envio. Verifique a porta privada do GitHub.");};
+    request.send(file);
+  } catch(e){fail(e);}
+};
+$("download").onclick = async () => {
+  try {
+    if (!activeJob || !/^[0-9a-f]{32}$/.test(activeJob)) throw new Error("Trabalho inválido");
+    status("Baixando MP4...");
+    const response = await fetch("/jobs/" + activeJob + "/output", {headers:auth(),credentials:"same-origin",redirect:"error",cache:"no-store"});
+    if (!response.ok || !(response.headers.get("content-type") || "").includes("video/mp4")) throw new Error("MP4 ainda não disponível.");
+    const file = await response.blob();
+    const url = URL.createObjectURL(file);
+    const link = document.createElement("a");
+    link.href=url;link.download="EditorClipesDSS_"+activeJob.slice(0,8)+".mp4";
+    document.body.appendChild(link);link.click();link.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60000);
+    status("Download iniciado. Confira os downloads do navegador.");
+  } catch(e){fail(e);}
+};
+})();
+</script>
+</body>
+</html>
