@@ -1,5 +1,7 @@
 name: EditorClipesDSS - compilar Android Kick Chat
 on:
+  push:
+    branches: [feature/kick-chat-landscape]
   pull_request:
     paths:
       - 'EditorClipesDSS/**'
