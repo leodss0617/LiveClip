@@ -34,6 +34,9 @@ jobs:
         working-directory: EditorClipesDSS
         run: |
           keytool -genkeypair -keystore debug.keystore -alias androiddebugkey -storepass android -keypass android -keyalg RSA -keysize 2048 -validity 365 -dname "CN=Android Debug,O=EditorClipesDSS,C=BR"
+      - name: Usar AAPT2 Linux no GitHub, sem afetar o AndroidIDE
+        working-directory: EditorClipesDSS
+        run: sed -i '/^android.aapt2FromMavenOverride=/d' gradle.properties
       - name: Compilar APK debug
         working-directory: EditorClipesDSS
         run: gradle :app:assembleDebug --no-daemon --stacktrace
