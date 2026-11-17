@@ -1,0 +1,46 @@
+name: EditorClipesDSS - compilar Android Kick Chat
+on:
+  pull_request:
+    paths:
+      - 'EditorClipesDSS/**'
+      - '.github/workflows/editorclipes-android-build.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-android-debug:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - name: Baixar codigo
+        uses: actions/checkout@v4
+      - name: Configurar Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Configurar Gradle 9.3.1
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '9.3.1'
+      - name: SDK Android
+        uses: android-actions/setup-android@v3
+      - name: Instalar Android API 36 e Build Tools
+        run: |
+          sdkmanager --install 'platforms;android-36' 'build-tools;36.0.0'
+      - name: Criar assinatura de testes apenas para build temporario
+        working-directory: EditorClipesDSS
+        run: |
+          keytool -genkeypair -keystore debug.keystore -alias androiddebugkey -storepass android -keypass android -keyalg RSA -keysize 2048 -validity 365 -dname "CN=Android Debug,O=EditorClipesDSS,C=BR"
+      - name: Compilar APK debug
+        working-directory: EditorClipesDSS
+        run: gradle :app:assembleDebug --no-daemon --stacktrace
+      - name: Salvar APK somente se compilacao concluir
+        if: success()
+        uses: actions/upload-artifact@v4
+        with:
+          name: editorclipes-kick-chat-debug-unverified
+          path: EditorClipesDSS/app/build/outputs/apk/debug/*.apk
+          retention-days: 7
