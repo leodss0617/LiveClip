@@ -12,19 +12,6 @@ from urllib.request import Request, urlopen
 
 
 class CloudServiceTest(unittest.TestCase):
-    def test_end_to_end(self):
-        with tempfile.TemporaryDirectory() as temp:
-            root = Path(temp)
-            env = os.environ.copy()
-            env["EDITOR_CLOUD_DATA"] = str(root / "work")
-            proc = subprocess.Popen(
-                [sys.executable, str(Path(__file__).with_name("service.py")), "--port", "0"],
-                env=env, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True
-            )
-            # A porta zero exige obter a porta real; neste teste usamos um socket previamente reservado.
-            proc.terminate()
-            proc.wait(timeout=5)
-
     def test_http_workflow(self):
         import socket
         with tempfile.TemporaryDirectory() as temp:
@@ -46,16 +33,28 @@ class CloudServiceTest(unittest.TestCase):
                             with urlopen(Request(base + "/health"), timeout=1):
                                 pass
                         except HTTPError as exc:
-                            if exc.code == 401:
+                            code = exc.code
+                            exc.close()
+                            if code == 401:
                                 break
                         except OSError:
                             pass
                     time.sleep(.1)
+                # Painel visivel no navegador, mas APIs continuam protegidas.
+                with urlopen(base + "/", timeout=5) as page:
+                    self.assertEqual(page.status, 200)
+                    self.assertIn(b"EditorClipesDSS Cloud", page.read())
+                    self.assertIn("no-store", page.headers.get("Cache-Control", ""))
+                with self.assertRaises(HTTPError) as blocked:
+                    urlopen(base + "/jobs", timeout=5)
+                self.assertEqual(blocked.exception.code, 401)
+                blocked.exception.close()
                 token = (root / "work" / "token").read_text().strip()
                 headers = {"Authorization": "Bearer " + token}
                 with self.assertRaises(HTTPError) as exc:
                     urlopen(base + "/health", timeout=5)
                 self.assertEqual(exc.exception.code, 401)
+                exc.exception.close()
                 with urlopen(Request(base + "/health", headers=headers), timeout=5) as response:
                     self.assertEqual(json.load(response)["status"], "ok")
                 video = root / "sample.mp4"
