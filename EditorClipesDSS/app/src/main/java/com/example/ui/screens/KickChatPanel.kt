@@ -18,7 +18,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -47,17 +46,6 @@ internal fun KickChatPanel(channel: String, modifier: Modifier = Modifier) {
     var loginMode by remember(channel) { mutableStateOf(false) }
     var webView by remember(channel) { mutableStateOf<WebView?>(null) }
     var info by remember(channel) { mutableStateOf("") }
-
-    DisposableEffect(channel) {
-        onDispose {
-            webView?.apply {
-                stopLoading()
-                loadUrl("about:blank")
-                destroy()
-            }
-            webView = null
-        }
-    }
 
     Column(modifier, verticalArrangement = Arrangement.spacedBy(5.dp)) {
         Text("Chat da Kick", style = MaterialTheme.typography.titleSmall)
@@ -115,19 +103,26 @@ internal fun KickChatPanel(channel: String, modifier: Modifier = Modifier) {
                 update = { view ->
                     if (webView !== view) webView = view
                 },
+                onRelease = { view ->
+                    if (webView === view) webView = null
+                    view.stopLoading()
+                    view.loadUrl("about:blank")
+                    view.destroy()
+                },
             )
             if (info.isNotEmpty()) Text(info, style = MaterialTheme.typography.bodySmall)
             Text(
-                "Entre na sua conta pela página oficial da Kick. Se o login não abrir " +
-                    "aqui, use o navegador externo.",
+                "O chat popout da Kick é para leitura. O botão Entrar abre o site oficial; " +
+                    "para enviar mensagens, use a página normal do canal.",
                 style = MaterialTheme.typography.labelSmall,
             )
             OutlinedButton(
                 modifier = Modifier.fillMaxWidth(),
                 onClick = {
-                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(chatUrl)))
+                    val slug = Uri.parse(chatUrl).pathSegments.getOrNull(1).orEmpty()
+                    context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("https://kick.com/" + slug)))
                 }
-            ) { Text("Abrir chat no navegador") }
+            ) { Text("Abrir canal e conversar na Kick") }
         }
     }
 }
