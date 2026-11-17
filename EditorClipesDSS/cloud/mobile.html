@@ -61,7 +61,7 @@ let pollHandle = null;
 const token = () => $("token").value.trim();
 const auth = () => {
   if (!token()) throw new Error("Informe o código do serviço.");
-  return {"Authorization": "Bearer " + token()};
+  return {"X-EditorClipes-Token": token()};
 };
 function fail(error) { status("Erro: " + (error?.message || String(error))); }
 async function request(path) {
@@ -106,7 +106,7 @@ $("send").onclick = () => {
     const request = new XMLHttpRequest();
     request.open("POST", "/jobs");
     request.withCredentials = true;
-    request.setRequestHeader("Authorization", headers.Authorization);
+    request.setRequestHeader("X-EditorClipes-Token", headers["X-EditorClipes-Token"]);
     request.setRequestHeader("Content-Type", "video/mp4");
     $("send").disabled = true;
     $("progress").hidden = false;
