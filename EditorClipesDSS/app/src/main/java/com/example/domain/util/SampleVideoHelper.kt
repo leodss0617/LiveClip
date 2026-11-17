@@ -3,7 +3,6 @@ package com.example.domain.util
 import android.content.Context
 import android.net.Uri
 import android.util.Log
-import com.example.R
 import java.io.File
 import java.io.FileOutputStream
 
@@ -18,7 +17,9 @@ object SampleVideoHelper {
      * Uses android.resource:// scheme which is natively supported without filesystem permission restrictions.
      */
     fun getOrCreateSampleVideoUri(context: Context): Uri {
-        return Uri.parse("android.resource://${context.packageName}/${R.raw.sample_live}")
+        val id = context.resources.getIdentifier("sample_live", "raw", context.packageName)
+        require(id != 0) { "O vídeo de exemplo não foi incluído nesta compilação." }
+        return Uri.parse("android.resource://${context.packageName}/$id")
     }
 
     /**
@@ -28,7 +29,9 @@ object SampleVideoHelper {
         val targetFile = File(context.filesDir, SAMPLE_FILE_NAME)
         if (!targetFile.exists() || targetFile.length() < MIN_VALID_SIZE_BYTES) {
             try {
-                context.resources.openRawResource(R.raw.sample_live).use { input ->
+                val id = context.resources.getIdentifier("sample_live", "raw", context.packageName)
+                require(id != 0) { "O vídeo de exemplo não foi incluído nesta compilação." }
+                context.resources.openRawResource(id).use { input ->
                     FileOutputStream(targetFile).use { output ->
                         input.copyTo(output)
                     }
