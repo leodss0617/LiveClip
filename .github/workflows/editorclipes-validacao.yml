@@ -5,6 +5,11 @@ on:
     paths:
       - 'EditorClipesDSS/**'
       - '.github/workflows/editorclipes-validacao.yml'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'EditorClipesDSS/**'
+      - '.github/workflows/editorclipes-validacao.yml'
   workflow_dispatch:
 jobs:
   verificar-linux:

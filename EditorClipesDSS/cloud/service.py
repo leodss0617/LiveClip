@@ -84,6 +84,20 @@ def make_handler(token):
             return True
 
         def do_GET(self):
+            # Somente a pagina de entrada e publica dentro do proxy privado
+            # do Codespaces. Todas as rotas de dados exigem Bearer token.
+            if urlsplit(self.path).path in ("/", "/index.html"):
+                page = (Path(__file__).with_name("mobile.html")).read_bytes()
+                self.send_response(200)
+                self.send_header("Content-Type", "text/html; charset=utf-8")
+                self.send_header("Content-Length", str(len(page)))
+                self.send_header("Cache-Control", "no-store")
+                self.send_header("Referrer-Policy", "no-referrer")
+                self.send_header("X-Content-Type-Options", "nosniff")
+                self.send_header("Content-Security-Policy", "default-src 'none'; script-src 'unsafe-inline'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' blob:; form-action 'none'; frame-ancestors 'none'; base-uri 'none'")
+                self.end_headers()
+                self.wfile.write(page)
+                return
             if not self.authorize():
                 return
             parts = urlsplit(self.path).path.strip("/").split("/")
