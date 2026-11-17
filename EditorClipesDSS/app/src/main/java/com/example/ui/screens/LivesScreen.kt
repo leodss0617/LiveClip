@@ -24,6 +24,8 @@ import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -86,7 +88,9 @@ internal fun LivesScreen(
     var showClips by rememberSaveable { mutableStateOf<String?>(null) }
     var preview by remember { mutableStateOf<Pair<Uri, String>?>(null) }
     var busy by remember { mutableStateOf(false) }
-    var expandedControlsVisible by rememberSaveable { mutableStateOf(true) }
+    // No modo paisagem, priorizar o chat Kick; ações ficam num menu compacto.
+    var expandedControlsVisible by rememberSaveable { mutableStateOf(false) }
+    var expandedChatVisible by rememberSaveable { mutableStateOf(true) }
 
     fun saveChannels() {
         prefs.edit().putString("multi_live_channels", JSONArray(channels.toList()).toString()).apply()
@@ -224,18 +228,49 @@ internal fun LivesScreen(
         BackHandler { onExpand(null) }
         BoxWithConstraints(Modifier.fillMaxSize().padding(8.dp)) {
             if (maxWidth > maxHeight) {
-                Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+                Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     StreamVideo(activePlayer, Modifier.weight(1f).fillMaxHeight(), controls = true)
-                    Column(Modifier.width(if (expandedControlsVisible) 124.dp else 42.dp).fillMaxHeight()) {
-                        IconButton(onClick = { expandedControlsVisible = !expandedControlsVisible }, modifier = Modifier.size(40.dp)) {
-                            Icon(if (expandedControlsVisible) Icons.Filled.Close else Icons.Filled.Fullscreen,
-                                contentDescription = if (expandedControlsVisible) "Recolher controles" else "Mostrar controles")
-                        }
-                        if (expandedControlsVisible) {
-                            Text(expanded.substringAfterLast('/'), style = MaterialTheme.typography.labelMedium)
-                            Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
-                                ExpandedActions(expanded, activePlayer)
+                    Column(
+                        modifier = Modifier
+                            .width(if (expandedChatVisible) (maxWidth * 0.42f).coerceAtMost(360.dp) else 44.dp)
+                            .fillMaxHeight(),
+                        verticalArrangement = Arrangement.spacedBy(4.dp),
+                    ) {
+                        Row(horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+                            IconButton(
+                                onClick = { expandedChatVisible = !expandedChatVisible },
+                                modifier = Modifier.size(40.dp),
+                            ) {
+                                Icon(
+                                    Icons.Filled.ChatBubbleOutline,
+                                    contentDescription = if (expandedChatVisible) "Ocultar chat Kick" else "Mostrar chat Kick",
+                                )
                             }
+                            if (expandedChatVisible) {
+                                IconButton(
+                                    onClick = { expandedControlsVisible = !expandedControlsVisible },
+                                    modifier = Modifier.size(40.dp),
+                                ) {
+                                    Icon(
+                                        Icons.Filled.Menu,
+                                        contentDescription = if (expandedControlsVisible) "Ocultar ações" else "Mostrar ações",
+                                    )
+                                }
+                            }
+                        }
+                        if (expandedChatVisible) {
+                            if (expandedControlsVisible) {
+                                Column(
+                                    Modifier.heightIn(max = 150.dp)
+                                        .verticalScroll(rememberScrollState()),
+                                ) {
+                                    ExpandedActions(expanded, activePlayer)
+                                }
+                            }
+                            KickChatPanel(
+                                channel = expanded,
+                                modifier = Modifier.weight(1f).fillMaxWidth(),
+                            )
                         }
                     }
                 }
