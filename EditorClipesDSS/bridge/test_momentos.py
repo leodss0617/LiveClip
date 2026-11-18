@@ -11,6 +11,31 @@ def speech(start, text):
 
 
 class MomentSelectionTest(unittest.TestCase):
+    def test_title_describes_payoff_instead_of_repeating_hook(self):
+        words = speech(5, 'Será que consigo ganhar sozinho contra os três?')
+        words += speech(12, 'Consegui ganhar a rodada sozinho!')
+        cuts = select_moments(30, 1, 25, words, [-40]*30)
+        self.assertEqual(len(cuts), 1)
+        self.assertIn('Consegui ganhar a rodada sozinho', cuts[0].title)
+        self.assertNotIn('Será que', cuts[0].title)
+
+    def test_title_uses_final_event_without_generic_catchphrase(self):
+        words = speech(4, 'Será que dá pra ganhar sozinho contra os três?')
+        words += speech(10, 'Peguei os três!')
+        words += speech(14, 'Ganhei a rodada!')
+        cuts = select_moments(29, 1, 24, words, [-40]*29)
+        self.assertEqual(len(cuts), 1)
+        self.assertIn('Ganhei a rodada', cuts[0].title)
+        self.assertNotEqual(cuts[0].title, 'Ganhei!')
+
+    def test_does_not_include_start_of_unrelated_next_topic(self):
+        words = speech(4, 'Será que consigo vencer essa partida sozinho?')
+        words += speech(10, 'Consegui vencer essa partida sozinho!')
+        words += speech(13, 'Mudando de assunto vou explicar um filme diferente.')
+        cuts = select_moments(29, 1, 24, words, [-40]*29)
+        self.assertEqual(len(cuts), 1)
+        self.assertLess(cuts[0].end, 13)
+
     def test_story_beats_louder_filler_and_opens_at_the_hook(self):
         words = speech(8, 'Mano olha mano olha mano olha mano olha!')
         words += speech(45, 'Será que dá pra ganhar sozinho contra os três?')

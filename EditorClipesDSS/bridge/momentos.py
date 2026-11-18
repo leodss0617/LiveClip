@@ -90,6 +90,75 @@ def opening_context(lines, anchor):
     return first
 
 
+
+TITLE_NOISE = re.compile(r'^(?:(?:mano|cara|chat|galera|gente|véi|tipo|olha só)[,!.:\s-]+){1,3}', re.I)
+TITLE_TOO_VAGUE = re.compile(r'^(?:não acredito|que isso|caraca|meu deus|ganhei|perdi|deu certo|deu errado)[!?.\s]*$', re.I)
+
+
+def _title_phrase(value):
+    """Mantém apenas palavras transcritas: título não inventa um acontecimento."""
+    value = re.sub(r'\s+', ' ', value).strip(' ,;:-')
+    value = TITLE_NOISE.sub('', value).strip(' ,;:-')
+    return value[0].upper() + value[1:] if value else ''
+
+
+def _short_title(value, maximum=68):
+    value = _title_phrase(value)
+    if len(value) <= maximum:
+        return value
+    # Evita manchetes partidas depois de uma frase completa.
+    for sentence in re.split(r'(?<=[.!?])\s+', value):
+        if 24 <= len(sentence) <= maximum:
+            return sentence
+    for mark in ('. ', '! ', '? ', '; ', ', '):
+        prefix = value.split(mark, 1)[0]
+        if 25 <= len(prefix) <= maximum:
+            return prefix + (mark[0] if mark[0] in '.!?' else '')
+    prefix = value[:maximum - 1].rsplit(' ', 1)[0].rstrip(' ,;:-')
+    return prefix + '…' if prefix else value[:maximum]
+
+
+def scene_title(scene, hook_index=0):
+    """Usa o acontecimento/desfecho do trecho, com o gancho só como contexto.
+
+    Sem modelo generativo, o título deve ser formado estritamente a partir
+    da fala reconhecida, nunca de uma reação presumida ou assunto externo.
+    """
+    if not scene:
+        return ''
+    hook = _title_phrase(scene[min(hook_index, len(scene) - 1)][2])
+    payoff_indices = [i for i, line in enumerate(scene)
+                      if PAYOFF.search(line[2]) and not re.search(
+                          r'\bnão (?:consegui|ganhei)\b', line[2], re.I)]
+    for index in reversed(payoff_indices):
+        ending = _title_phrase(scene[index][2])
+        if not ending:
+            continue
+        if len(tokens(ending)) >= 4 and not TITLE_TOO_VAGUE.fullmatch(ending):
+            return _short_title(ending)
+        # Uma reação solta não vira título; inclui a ação anterior se couber.
+        if hook and hook != ending and len(tokens(hook) - tokens(ending)) >= 2:
+            contextual = f'{hook} {ending}'
+            if len(contextual) <= 68:
+                return _short_title(contextual)
+        if index and scene[index][0] - scene[index - 1][1] <= 4:
+            prior = _title_phrase(scene[index - 1][2])
+            combo = f'{prior} {ending}'.strip()
+            if len(tokens(combo)) >= 4 and len(combo) <= 68:
+                return _short_title(combo)
+        if hook and hook != ending:
+            combo = f'{hook} {ending}'
+            if len(combo) <= 68:
+                return _short_title(combo)
+    # Sem desfecho explícito: pergunta + resposta pertencentes à mesma cena.
+    last = _title_phrase(scene[-1][2])
+    if hook and last and hook != last and not last.endswith('?'):
+        combo = f'{hook} {last}'
+        if len(combo) <= 68 and len(tokens(last)) >= 3:
+            return _short_title(combo)
+    return _short_title(hook or last or scene[0][2])
+
+
 def select_moments(duration, count, maximum, words, energy, *, end_after=0, end_before=None):
     lines = []
     for phrase in phrases(words, duration):
@@ -141,17 +210,12 @@ def select_moments(duration, count, maximum, words, energy, *, end_after=0, end_
             score = min(1.5, len(opening_tokens)*0.16) + 4*hook + 4*payoff + int(exchange) + lift + min(2,len(terms)/8) - min(2.4,gaps*0.08) - min(1.6,max(0,span-55)*0.02)
             if not hook and score < 5.5:
                 continue
-            title = opening.strip(' ,.!?')
-            if len(opening_tokens) < 5 and i < j:
-                next_line = lines[i+1][2].strip(' ,.!?')
-                title = title + ('? ' if opening.endswith('?') else ' — ') + next_line
-            if opening.endswith('?') and len(opening_tokens) >= 5 and len(title) < 68:
-                title += '?'
-            if len(title) > 68:
-                title = title[:67].rsplit(' ',1)[0].rstrip(' ,.!?—') + '…'
+            title = scene_title(lines[first:j+1], i-first)
             next_start = lines[j+1][0] if j+1 < len(lines) else duration
-            clip_start = max(0,start-0.4)
-            clip_end = min(duration,clip_start+maximum,end+1.3,max(end,next_start))
+            clip_start = max(0, start-0.4)
+            # Nunca inclui o começo do assunto seguinte no final do vídeo.
+            tail = min(end+0.85, next_start-0.12) if next_start < duration else end+0.85
+            clip_end = min(duration, clip_start+maximum, max(end+0.08, tail))
             reasons = []
             if first < i:
                 reasons.append('Preparação da cena incluída antes do gancho')

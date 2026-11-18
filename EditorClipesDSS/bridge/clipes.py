@@ -39,7 +39,7 @@ def details(cut, words, url=None, original_duration=None):
     lines = [' '.join(w['w'] for w in phrase) for phrase in phrases(
         [w for w in words if start <= w['s'] < end], end
     )]
-    title = cut['titulo'].strip(' ,.!?')[:75]
+    title = ' '.join(cut['titulo'].split()).strip(' ,')[:75]
     last = lines[-1].strip() if lines else ''
     caption = ' '.join(dict.fromkeys(
         text for text in (lines[0].strip() if lines else '',last) if text
