@@ -35,6 +35,18 @@ private const val TERMUX_HOME = "/data/data/com.termux/files/home"
 class TermuxResultReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val result = intent.getBundleExtra("result") ?: return
+        if (intent.getBooleanExtra("pair_bridge", false)) {
+            val raw = result.getString("stdout").orEmpty().trim()
+            val state = context.getSharedPreferences("maquina_de_cortes", Context.MODE_PRIVATE)
+            val valid = result.getInt("exitCode", -1) == 0 &&
+                raw.matches(Regex("[A-Za-z0-9_-]{24,160}"))
+            if (valid) {
+                state.edit().putString("token", raw).putString("pairing_status", "Código recebido do Termux. Verificando servidor…").apply()
+            } else {
+                state.edit().putString("pairing_status", "Não foi possível obter o código. Confira a permissão Executar comandos do Termux.").apply()
+            }
+            return
+        }
         val settings = context.getSharedPreferences("termux_console", Context.MODE_PRIVATE)
         val output = listOfNotNull(result.getString("stdout"), result.getString("stderr"),
             result.getString("errmsg")).filter { it.isNotBlank() }.joinToString("\n").takeLast(20_000)
@@ -44,6 +56,25 @@ class TermuxResultReceiver : BroadcastReceiver() {
             if (folder != null) putString("directory", folder)
         }.apply()
     }
+}
+
+internal fun requestTermuxPairing(context: Context) {
+    val home = "/data/data/com.termux/files/home"
+    val callback = Intent(context, TermuxResultReceiver::class.java).putExtra("pair_bridge", true)
+    val flags = PendingIntent.FLAG_ONE_SHOT or
+        (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0)
+    val result = PendingIntent.getBroadcast(context, System.nanoTime().toInt(), callback, flags)
+    // Somente o callback do próprio aplicativo recebe a saída. Não guardar em logs.
+    val intent = Intent("com.termux.RUN_COMMAND")
+        .setClassName("com.termux", "com.termux.app.RunCommandService")
+        .putExtra("com.termux.RUN_COMMAND_PATH", "/data/data/com.termux/files/usr/bin/bash")
+        .putExtra("com.termux.RUN_COMMAND_ARGUMENTS", arrayOf(
+            "-lc", "proot-distro login maquina-cortes -- /bin/cat /root/.editorclipes-token"
+        ))
+        .putExtra("com.termux.RUN_COMMAND_WORKDIR", home)
+        .putExtra("com.termux.RUN_COMMAND_BACKGROUND", true)
+        .putExtra("com.termux.RUN_COMMAND_PENDING_INTENT", result)
+    checkNotNull(context.startService(intent)) { "Serviço Termux indisponível." }
 }
 
 private fun runTermux(context: Context, directory: String, args: Array<String>, openFolder: Boolean) {

@@ -16,3 +16,24 @@ local.properties
 **/__pycache__/
 **/*.pyc
 **/.DS_Store
+# Local editor state, credentials and generated files
+*.bak
+*.bak-*
+*.orig
+*.tmp
+*.lock
+*.pem
+*.p12
+*.pfx
+*.key
+google-services.json
+**/google-services.json
+**/secrets.properties
+**/.env.*
+!.env.example
+*.sqlite
+*.db
+.cache/
+.idea/
+local.properties
+debug.keystore

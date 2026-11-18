@@ -18,6 +18,8 @@ from momentos import CONTEXT_LOOKAHEAD_SECONDS, select_moments
 from clipes import adjusted_grade, clip_speech, details, marked_moment
 from live_clock import CaptureClock, capture_offsets
 from trechos import verify_render_duration
+from chat_activity import activity_bonus
+from live_chat_monitor import monitor_chat
 
 CONTEXT_SECONDS = CONTEXT_LOOKAHEAD_SECONDS
 TRENDS_URL = 'https://trends.google.com/trending/rss?geo=BR'
@@ -28,11 +30,11 @@ def channel_url(value):
     try:
         url = urlsplit(value)
         slug = url.path.strip('/')
-        if (url.scheme == 'https' and url.hostname in ('kick.com', 'www.kick.com')
+        if (url.scheme == 'https' and url.hostname in ('kick.com', 'www.kick.com', 'twitch.tv', 'www.twitch.tv')
                 and url.username is None and url.password is None and url.port in (None, 443)
                 and re.fullmatch(r'[a-zA-Z0-9_-]{1,40}', slug)
                 and slug.lower() not in {'browse', 'categories', 'search', 'following', 'videos', 'clips'}):
-            return 'https://kick.com/' + slug
+            return 'https://' + ('twitch.tv' if url.hostname.endswith('twitch.tv') and 'kick.com' not in url.hostname else 'kick.com') + '/' + slug.lower()
     except (TypeError, ValueError, AttributeError):
         pass
     return None
@@ -107,13 +109,13 @@ def live_playback(channel, mobile=False):
         detail = str(exc).casefold()
         if any(reason in detail for reason in ('not currently live', 'is not live', 'channel is offline')):
             raise ValueError('O canal estava offline ao iniciar o monitoramento. Tente quando voltar ao vivo.') from None
-        raise ValueError('A Kick não entregou a transmissão. Tente novamente em instantes.') from None
+        raise ValueError('A plataforma não entregou a transmissão. Tente novamente em instantes.') from None
 
     if not info or not info.get('is_live'):
         raise ValueError('O canal estava offline ao iniciar o monitoramento. Tente quando voltar ao vivo.')
     selected = info.get('url')
     if not https_media_url(selected):
-        raise ValueError('A Kick não entregou um endereço de vídeo válido.')
+        raise ValueError('A plataforma não entregou um endereço de vídeo válido.')
     manifest = info.get('manifest_url')
     if mobile and not https_media_url(manifest):
         manifest = next((entry['manifest_url'] for entry in info.get('formats', ())
@@ -148,7 +150,7 @@ def keep_recent(capture, process, stop, lock):
 
 
 def process_live(folder, spec, count, maximum, log):
-    from bridge import check_stop, clip_metadata, probe, read_json, render_config, run, run_heavy, state
+    from bridge import check_stop, clip_metadata, probe, read_json, render_config, run, run_heavy, state, public_folder
 
     channel = channel_url(spec.get('url'))
     if not channel:
@@ -166,7 +168,7 @@ def process_live(folder, spec, count, maximum, log):
         if directory.exists():
             shutil.rmtree(directory)
     capture.mkdir()
-    out = Path(os.environ.get('EDITOR_EXPORTS','/mnt/downloads/EditorClipesDSS'))/folder.name
+    out = public_folder(folder, spec)
     out.mkdir(parents=True, exist_ok=True)
     headers = ''.join(f'{key}: {value}\r\n' for key,value in source['headers'].items()
                       if '\r' not in str(value) and '\n' not in str(value))
@@ -185,6 +187,8 @@ def process_live(folder, spec, count, maximum, log):
         stop = threading.Event()
         clock = CaptureClock(folder,source,stop)
         threading.Thread(target=clock.find_anchor,daemon=True).start()
+        # O chat alimenta a analise mesmo com o aplicativo minimizado ou painel fechado.
+        threading.Thread(target=monitor_chat,args=(folder,channel,stop),daemon=True).start()
         lock = threading.Lock()
         pruner = threading.Thread(target=keep_recent, args=(capture,process,stop,lock), daemon=True)
         pruner.start()
@@ -197,7 +201,7 @@ def process_live(folder, spec, count, maximum, log):
             measurements = {}
             activity = time.monotonic()
             state(folder,'Capturando a live em segundo plano')
-            while delivered < count:
+            while count == 0 or delivered < count:
                 check_stop(folder)
                 finished = process.poll() is not None
                 with lock:
@@ -274,10 +278,11 @@ def process_live(folder, spec, count, maximum, log):
                     candidates = select_moments(duration,30,maximum,words,energy,
                                                 end_after=max(0,boundary-CONTEXT_SECONDS),
                                                 end_before=duration if is_last_segment else duration-CONTEXT_SECONDS)
+                    chat_samples = read_json(folder/'chat-atividade.json', [])
                     candidates.sort(key=lambda moment: not marked_moment(moment.start,moment.end,marked_offsets))
                     for moment in candidates:
                         check_stop(folder)
-                        if delivered >= count:
+                        if count != 0 and delivered >= count:
                             break
                         ranges = segment_ranges(moment.start,moment.end,timeline)
                         if any(segment == old and a < y and x < b
@@ -289,9 +294,17 @@ def process_live(folder, spec, count, maximum, log):
                         marked = marked_moment(moment.start,moment.end,marked_offsets)
                         base = grade(moment.score, bool(topic), visual)
                         rating = adjusted_grade(base,transcript,spec.get('feedback',[]))
-                        if rating <= 7:
+                        chat_bonus, chat_count = activity_bonus(
+                            chat_samples,moment.start,moment.end,timeline,measurements)
+                        # O chat nao cria clipe de um momento sem contexto.
+                        if chat_bonus and rating >= 7.0 and len(transcript.split()) >= 12:
+                            rating = round(min(10, rating + chat_bonus), 1)
+                        else:
+                            chat_bonus, chat_count = 0, 0
+                        if rating <= 7.5:
                             continue
                         reasons = list(getattr(moment,'reasons',()))
+                        if chat_bonus: reasons.append('Chat mais ativo: '+str(chat_count)+' mensagens agregadas')
                         if topic: reasons.append('Assunto em alta relacionado: '+topic)
                         if visual: reasons.append('Mudança de imagem no trecho')
                         if marked: reasons.append('Perto do momento marcado por você')
@@ -307,11 +320,13 @@ def process_live(folder, spec, count, maximum, log):
                             (analysis/'palavras.json').write_text(json.dumps(words))
                             (analysis/'energia.json').write_text(json.dumps(energy))
                         config = render_config(folder,spec,video,info)
-                        state(folder,f'Exportando clipe {index} de {count} · nota {rating:.1f}')
+                        state(folder,f'Exportando clipe {index} · nota {rating:.1f} (mínima >7,5)')
                         config_file = analysis/'cortes.json'
                         config_file.write_text(json.dumps(dict(config,cortes=[cut])))
                         run_heavy(log,sys.executable,'scripts/cortar.py',str(config_file))
                         rendered = next((analysis/'cortes').glob(f'{index:02d}_*.mp4'))
+                        if shutil.disk_usage(out).free < 700 * 1024 * 1024:
+                            raise ValueError("Pouco espaço disponível. O monitoramento foi interrompido para proteger o armazenamento.")
                         target = out/f'{rendered.stem}_nota-{label}.mp4'
                         temp = out/(target.name+'.tmp')
                         verify_render_duration(float(probe(rendered)['format']['duration']), maximum)
@@ -329,10 +344,10 @@ def process_live(folder, spec, count, maximum, log):
                 activity = time.monotonic()
                 state(folder,'Acompanhando a transmissão ao vivo')
             check_stop(folder)
-            phase = 'Concluído' if delivered == count else 'Transmissão encerrada'
+            phase = 'Concluído' if count != 0 and delivered == count else 'Transmissão encerrada'
             if not delivered:
-                phase = 'Transmissão encerrada sem clipes acima de 7'
-            state(folder,phase,status='done',prontos=delivered,total=count)
+                phase = 'Transmissão encerrada sem clipes com nota acima de 7,5'
+            state(folder,phase,status='done',prontos=delivered,total=delivered)
         finally:
             stop.set()
             if process.poll() is None:

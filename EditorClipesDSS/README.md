@@ -1,13 +1,32 @@
-# EditorClipesDSS — versão Android 3.0 (16/11/2026)
+# EditorClipesDSS — Android 3.4.5 (18/11/2026)
 
-Código-fonte sincronizado do projeto atual no Termux em `~/editorclipes-maquina`.
+Codigo-fonte atualizado do EditorClipesDSS no Termux, com versionCode 33
+e versionName 3.4.5.
 
-## Organização
-- `app/src`: código Android Kotlin, Java, recursos XML e código JNI C++
-- `bridge`: serviços Python de edição, captura, fila, retomada, integração com PC e testes
-- `.devcontainer`: preparação do ambiente Linux para Codespaces (FFmpeg, Python, Git)
+## Recursos
+- Android: streamer e reacao em cortes verticais 9:16, legendas e clipes.
+- Bibliotecas de clipes e botoes de compartilhamento com TikTok.
+- Kick/Twitch: login em painel seguro Custom Tabs iniciado no aplicativo.
+  Google nao permite login em WebView. Autenticacao de navegador nao
+  concede, por si, acesso OAuth as APIs das plataformas.
+- Monitor Kick: chat publico consultado periodicamente; ranking por picos
+  de participacao, reacoes e alinhamento com fala/audio e contexto.
+- Motor Python em bridge para captura de lives, exportacao e testes.
 
-## Importante
-Este envio contém **arquivos de texto/código**, não um APK compilado. Por segurança e tamanho, não inclui vídeos, caches, logs, chaves de assinatura, `local.properties`, modelos de IA, bibliotecas `.so`, fontes `.ttf`, imagens binárias, nem arquivos de configuração com segredos. Alguns binários são necessários para recompilar o APK; providencie-os por fonte confiável/licenças e gere bibliotecas nativas no build apropriado. A configuração de Codespaces prepara ferramentas, mas ainda **não conecta automaticamente** o app Android ao terminal remoto.
+## Testes e instalacao
+No Termux, o motor passou em 83 testes (3 ignorados) e o APK
+3.4.5 foi compilado com sucesso. A integracao visual deve ser
+validada em uso real no aparelho.
+Para compilar no GitHub, use GitHub Actions com JDK 17 e Android API 36.
+O workflow gera chave de debug temporaria: o APK gerado em CI pode
+nao atualizar a instalacao assinada pelo debug.keystore do Termux.
 
-Este conteúdo foi colocado em subpasta para preservar o LiveClip original. Execute testes antes de usar como versão de produção.
+## Ambiente
+O override android.aapt2FromMavenOverride do Termux deve ficar somente
+no arquivo de configuracao local, nunca no repositorio compartilhado.
+O chat da Kick depende de endpoint publico nao oficial, sujeito a mudancas.
+O monitoramento em segundo plano depende das restricoes do Android.
+
+## Privacidade
+Nao versionar senhas, tokens, cookies, arquivos .env, keystores,
+logs, bancos locais, videos particulares, caches ou backups.

@@ -2,11 +2,19 @@ package com.example.ui.screens
 
 import android.app.Activity
 import android.content.Context
+import android.content.pm.PackageManager
 import android.content.Intent
 import android.content.pm.ActivityInfo
 import android.net.Uri
 import androidx.activity.compose.BackHandler
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectHorizontalDragGestures
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.graphics.Color
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
@@ -24,6 +32,8 @@ import androidx.compose.material.icons.filled.Stop
 import androidx.compose.material.icons.filled.VideoLibrary
 import androidx.compose.material.icons.filled.VolumeOff
 import androidx.compose.material.icons.filled.VolumeUp
+import androidx.compose.material.icons.filled.Menu
+import androidx.compose.material.icons.filled.ChatBubbleOutline
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.saveable.rememberSaveable
@@ -66,7 +76,31 @@ internal fun LivesScreen(
 ) {
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("maquina_de_cortes", Context.MODE_PRIVATE) }
-    val token = prefs.getString("token", "").orEmpty()
+    var token by remember { mutableStateOf(prefs.getString("token", "").orEmpty()) }
+    var pairingStatus by remember { mutableStateOf(prefs.getString("pairing_status", "").orEmpty()) }
+    val pairingPermission = rememberLauncherForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) runCatching { requestTermuxPairing(context) }
+            .onFailure { pairingStatus = it.localizedMessage ?: "Termux indisponível." }
+        else pairingStatus = "Autorize Executar comandos no Termux nas permissões do aplicativo."
+    }
+    fun pairTermux() {
+        pairingStatus = "Conectando ao Termux…"
+        prefs.edit().putString("pairing_status", pairingStatus).apply()
+        if (context.checkSelfPermission("com.termux.permission.RUN_COMMAND") ==
+            PackageManager.PERMISSION_GRANTED) {
+            runCatching { requestTermuxPairing(context) }
+                .onFailure { pairingStatus = it.localizedMessage ?: "Termux indisponível." }
+        } else pairingPermission.launch("com.termux.permission.RUN_COMMAND")
+    }
+    DisposableEffect(prefs) {
+        val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == "token") token = prefs.getString("token", "").orEmpty()
+            if (key == "pairing_status") pairingStatus = prefs.getString("pairing_status", "").orEmpty()
+        }
+        prefs.registerOnSharedPreferenceChangeListener(listener)
+        onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
+    }
+
     val scope = rememberCoroutineScope()
     val players by LivePlayback.players.collectAsState()
     val channels = remember {
@@ -86,7 +120,31 @@ internal fun LivesScreen(
     var showClips by rememberSaveable { mutableStateOf<String?>(null) }
     var preview by remember { mutableStateOf<Pair<Uri, String>?>(null) }
     var busy by remember { mutableStateOf(false) }
-    var expandedControlsVisible by rememberSaveable { mutableStateOf(true) }
+    // No modo paisagem, priorizar o chat Kick; ações ficam num menu compacto.
+    var expandedControlsVisible by rememberSaveable { mutableStateOf(false) }
+    var expandedChatVisible by rememberSaveable { mutableStateOf(false) }
+    var autoPairAttempted by remember { mutableStateOf(false) }
+    LaunchedEffect(token) {
+        if (token.isBlank() && !autoPairAttempted &&
+            context.checkSelfPermission("com.termux.permission.RUN_COMMAND") ==
+            PackageManager.PERMISSION_GRANTED) {
+            autoPairAttempted = true
+            pairTermux()
+        }
+    }
+    var pendingNativeChannel by rememberSaveable { mutableStateOf<String?>(null) }
+    LaunchedEffect(pendingNativeChannel, players) {
+        val pending = pendingNativeChannel ?: return@LaunchedEffect
+        val player = players[pending] ?: return@LaunchedEffect
+        if (player.player != null || player.loading) {
+            pendingNativeChannel = null
+            onExpand(pending)
+        } else if (player.message != null) {
+            message = player.message
+            pendingNativeChannel = null
+        }
+    }
+
 
     fun saveChannels() {
         prefs.edit().putString("multi_live_channels", JSONArray(channels.toList()).toString()).apply()
@@ -150,6 +208,8 @@ internal fun LivesScreen(
         }
     }
     LaunchedEffect(token) {
+        reachable = null
+        jobs = emptyMap()
         if (token.isBlank()) return@LaunchedEffect
         while (true) {
             try {
@@ -181,9 +241,14 @@ internal fun LivesScreen(
                 runJob { request("/jobs/" + job.id + "/stop", token, JSONObject()) }
             }
         } else {
-            LiveAction(Icons.Filled.ContentCut, "Monitorar", "Monitorar cortes", enabled = !busy && reachable == true) {
-                message = ""
-                monitor = channel
+            LiveAction(Icons.Filled.ContentCut, "Monitorar", "Monitorar cortes", enabled = !busy) {
+                if (reachable == true && token.isNotBlank()) {
+                    message = ""
+                    monitor = channel
+                } else {
+                    message = "Conecte o Termux para monitorar cortes. O aplicativo tentará recuperar o código."
+                    pairTermux()
+                }
             }
         }
     }
@@ -222,30 +287,28 @@ internal fun LivesScreen(
             }
         }
         BackHandler { onExpand(null) }
-        BoxWithConstraints(Modifier.fillMaxSize().padding(8.dp)) {
-            if (maxWidth > maxHeight) {
-                Row(Modifier.fillMaxSize(), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                    StreamVideo(activePlayer, Modifier.weight(1f).fillMaxHeight(), controls = true)
-                    Column(Modifier.width(if (expandedControlsVisible) 124.dp else 42.dp).fillMaxHeight()) {
-                        IconButton(onClick = { expandedControlsVisible = !expandedControlsVisible }, modifier = Modifier.size(40.dp)) {
-                            Icon(if (expandedControlsVisible) Icons.Filled.Close else Icons.Filled.Fullscreen,
-                                contentDescription = if (expandedControlsVisible) "Recolher controles" else "Mostrar controles")
-                        }
-                        if (expandedControlsVisible) {
-                            Text(expanded.substringAfterLast('/'), style = MaterialTheme.typography.labelMedium)
-                            Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
-                                ExpandedActions(expanded, activePlayer)
-                            }
+        val chatAnalysisEnabled = context.getSharedPreferences("editorclipesdss", Context.MODE_PRIVATE)
+            .getBoolean("chat_signal_enabled", true)
+        LiveFullscreenOverlay(
+            channel = expanded,
+            playback = activePlayer,
+            actions = { ExpandedActions(expanded, activePlayer) },
+            onChatActivity = { count, excitement ->
+                val activeJob = jobs[expanded]
+                if (chatAnalysisEnabled && token.isNotBlank() && activeJob?.active == true) {
+                    scope.launch {
+                        try {
+                            request("/jobs/" + activeJob.id + "/chat-signal", token,
+                                JSONObject().put("mensagens", count).put("animacao", excitement.toDouble()))
+                        } catch (e: CancellationException) {
+                            throw e
+                        } catch (_: Exception) {
+                            // A conexão do chat não interrompe a captura da live.
                         }
                     }
                 }
-            } else {
-                Column(Modifier.fillMaxSize()) {
-                    StreamVideo(activePlayer, Modifier.fillMaxWidth().weight(1f), controls = true)
-                    ExpandedActions(expanded, activePlayer)
-                }
-            }
-        }
+            },
+        )
         return
     }
     LaunchedEffect(expanded, activePlayer) {
@@ -260,16 +323,24 @@ internal fun LivesScreen(
             Text("Lives", style = MaterialTheme.typography.headlineMedium)
             if (channels.size < LivePlayback.LIMIT) {
                 OutlinedTextField(draft, { draft = it }, modifier = Modifier.fillMaxWidth(),
-                    label = { Text("Link do canal na Kick") }, singleLine = true,
+                    label = { Text("Link da live na Kick ou Twitch") }, singleLine = true,
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Uri))
                 LiveAction(Icons.Filled.Add, "Adicionar", "Adicionar live", enabled = draft.isNotBlank()) {
                     addLink(draft)
                 }
             }
-            if (token.isBlank()) Text("Salve o código de conexão na aba Ajustes.")
-            else if (reachable == false) {
-                Text("Conexão com o Termux indisponível.", color = MaterialTheme.colorScheme.error)
-                LiveAction(Icons.Filled.History, "Termux", "Abrir Termux") { onTermux(null) }
+            if (token.isBlank() || reachable == false) {
+                Text(if (token.isBlank()) "Monitoramento: conecte o Termux para ativar os cortes."
+                     else "O Termux não respondeu. Confira se o servidor está ativo.",
+                     color = MaterialTheme.colorScheme.onSurfaceVariant,
+                     style = MaterialTheme.typography.bodySmall)
+                Button(onClick = { pairTermux() }) { Text("Conectar Termux") }
+            } else if (reachable == true) {
+                Text("Monitoramento pronto", color = MaterialTheme.colorScheme.primary,
+                     style = MaterialTheme.typography.labelMedium)
+            }
+            if (pairingStatus.isNotBlank() && reachable != true) {
+                Text(pairingStatus, style = MaterialTheme.typography.bodySmall)
             }
             if (message.isNotBlank()) Text(message)
             for (channel in channels) key(channel) {
@@ -291,9 +362,20 @@ internal fun LivesScreen(
                                         playbackAction { LivePlayback.stop(context, channel) }
                                     }
                                 } else {
-                                    LiveAction(Icons.Filled.PlayArrow, "Assistir", "Assistir à live",
-                                        enabled = token.isNotBlank()) {
-                                        playbackAction { LivePlayback.play(context, channel, token) }
+                                    LiveAction(Icons.Filled.PlayArrow, "Assistir", "Assistir à live") {
+                                        if (token.isNotBlank() && reachable == true) {
+                                            playbackAction {
+                                                pendingNativeChannel = channel
+                                                LivePlayback.play(context, channel, token)
+                                            }
+                                        } else {
+                                            // Sem servidor, a Kick oficial no navegador é mais
+                                            // confiável que um WebView em branco.
+                                            playbackAction {
+                                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(channel)))
+                                            }
+                                            message = "Para assistir com player e chat dentro do app, conecte o Termux."
+                                        }
                                     }
                                 }
                             },
@@ -348,12 +430,22 @@ internal fun LivesScreen(
                 Column(Modifier.heightIn(max = 340.dp).verticalScroll(rememberScrollState())) {
                     if (job != null) for (clip in job.clips) {
                         val title = clip.removeSuffix(".mp4").substringBefore("_nota-").replace('_', ' ').replace('-', ' ')
-                        TextButton(enabled = !busy, onClick = {
-                            runJob {
-                                preview = clipFile(context, job.id, clip, token) to title
-                                showClips = null
-                            }
-                        }) { Text(title) }
+                        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.spacedBy(4.dp),
+                            verticalAlignment = Alignment.CenterVertically) {
+                            TextButton(modifier = Modifier.weight(1f), enabled = !busy, onClick = {
+                                runJob {
+                                    preview = clipFile(context, job.id, clip, token) to title
+                                    showClips = null
+                                }
+                            }) { Text(title, maxLines = 2) }
+                            OutlinedButton(enabled = !busy, onClick = {
+                                runJob {
+                                    val video = clipFile(context, job.id, clip, token)
+                                    if (!shareClipToTikTok(context, video))
+                                        message = "TikTok não encontrado; escolha um aplicativo."
+                                }
+                            }) { Text("TikTok") }
+                        }
                     }
                     if (message.isNotBlank()) Text(message)
                 }
@@ -373,10 +465,80 @@ internal fun LivesScreen(
 }
 
 @Composable
+private fun LiveFullscreenOverlay(
+    channel: String,
+    playback: LivePlaybackUi,
+    actions: @Composable () -> Unit,
+    onChatActivity: (Int, Float) -> Unit,
+) {
+        // Vídeo em tela inteira. O painel é sobreposto, nunca reserva espaço fixo.
+        var sidePanel by rememberSaveable(channel) { mutableStateOf("chat") }
+        var dragAmount by remember { mutableFloatStateOf(0f) }
+        Box(Modifier.fillMaxSize()
+            .pointerInput(channel) {
+                detectHorizontalDragGestures(
+                    onHorizontalDrag = { _, change -> dragAmount += change },
+                    onDragEnd = {
+                        if (dragAmount < -55f) sidePanel = "actions"
+                        if (dragAmount > 55f) sidePanel = "none"
+                        dragAmount = 0f
+                    },
+                    onDragCancel = { dragAmount = 0f },
+                )
+            }
+        ) {
+            StreamVideo(playback, Modifier.fillMaxSize(), controls = false)
+            // Alça pequena na borda, sempre visível para descobrir o menu.
+            Row(Modifier.align(Alignment.TopEnd).padding(top = 4.dp, end = 3.dp),
+                horizontalArrangement = Arrangement.spacedBy(1.dp)) {
+                IconButton(onClick = {
+                    sidePanel = if (sidePanel == "chat") "none" else "chat"
+                }, modifier = Modifier.size(42.dp).background(Color.Black.copy(alpha=.48f), RoundedCornerShape(12.dp))) {
+                    Icon(Icons.Filled.ChatBubbleOutline, contentDescription = "Mostrar chat sobre a live", tint = Color.White)
+                }
+                IconButton(onClick = {
+                    sidePanel = if (sidePanel == "actions") "none" else "actions"
+                }, modifier = Modifier.size(42.dp).background(Color.Black.copy(alpha=.48f), RoundedCornerShape(12.dp))) {
+                    Icon(Icons.Filled.Menu, contentDescription = "Puxar menu lateral", tint = Color.White)
+                }
+            }
+            if (sidePanel != "none") {
+                Column(Modifier.align(Alignment.CenterEnd)
+                    .fillMaxHeight(if (sidePanel == "chat") .88f else 1f)
+                    .fillMaxWidth(if (sidePanel == "chat") .52f else .43f)
+                    .background(Color.Black.copy(alpha = if (sidePanel == "chat") .93f else .82f),
+                        RoundedCornerShape(topStart = 14.dp, bottomStart = 14.dp))
+                    .padding(6.dp),
+                    verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                    Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween,
+                        verticalAlignment = Alignment.CenterVertically) {
+                        Text(if (sidePanel == "chat") "Chat ao vivo · mensagens legíveis" else "Controles",
+                            style = MaterialTheme.typography.labelMedium, color = Color.White)
+                        IconButton(onClick = { sidePanel = "none" }, modifier = Modifier.size(34.dp)) {
+                            Icon(Icons.Filled.Close, contentDescription = "Fechar painel", tint = Color.White)
+                        }
+                    }
+                    if (sidePanel == "chat") {
+                        KickChatPanel(
+                            channel = channel,
+                            modifier = Modifier.fillMaxWidth().weight(1f),
+                            onChatActivity = onChatActivity,
+                        )
+                    } else {
+                        Column(Modifier.verticalScroll(rememberScrollState()).weight(1f)) {
+                            actions()
+                        }
+                    }
+                }
+            }
+        }
+}
+
+@Composable
 private fun StreamVideo(playback: LivePlaybackUi?, modifier: Modifier, controls: Boolean = false) {
     val player = playback?.player
     if (player == null) Box(modifier, contentAlignment = Alignment.Center) {
-        Text(playback?.message ?: if (playback?.loading == true) "Conectando…" else "Player fechado",
+        Text(playback?.message ?: if (playback?.loading == true) "Conectando…" else "Toque em Assistir para abrir a transmissão",
             modifier = Modifier.padding(8.dp), style = MaterialTheme.typography.bodySmall)
     } else LiveVideoSurface(player, modifier, controls)
 }
@@ -487,9 +649,8 @@ private fun StreamControls(
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
 private fun LiveMonitorDialog(channel: String, busy: Boolean, message: String, onDismiss: () -> Unit, onConfirm: (JSONObject) -> Unit) {
-    var count by rememberSaveable(channel) { mutableStateOf(6) }
+    val count = 0 // monitoramento contínuo até encerrar a live ou usuário parar
     var minutes by rememberSaveable(channel) { mutableStateOf(4) }
-    var camera by rememberSaveable(channel) { mutableStateOf("auto") }
     var effects by rememberSaveable(channel) { mutableStateOf(false) }
     var trends by rememberSaveable(channel) { mutableStateOf(true) }
     AlertDialog(
@@ -500,24 +661,21 @@ private fun LiveMonitorDialog(channel: String, busy: Boolean, message: String, o
                 verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 if (message.isNotBlank()) Text(message, color = MaterialTheme.colorScheme.error)
                 Text("Até 2 lives simultâneas: usa o PC se estiver disponível; sem PC, processa no Termux.", style = MaterialTheme.typography.bodySmall)
-                Text("Limite de clipes com nota acima de 7")
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    OutlinedButton(enabled = count > 1, onClick = { count-- }) { Text("−") }
-                    Text(count.toString(), Modifier.padding(horizontal = 12.dp))
-                    OutlinedButton(enabled = count < 30, onClick = { count++ }) { Text("+") }
-                }
+                Text("Clipes automáticos enquanto a live durar", style = MaterialTheme.typography.titleSmall)
+                Text("Sem quantidade fixa. Exporta apenas momentos com nota acima de 7,5, " +
+                    "considerando começo, desenvolvimento e desfecho. Para ao encerrar a live, " +
+                    "ao tocar em Parar ou quando faltar espaço no aparelho.",
+                    style = MaterialTheme.typography.bodySmall)
                 Text("Duração máxima")
                 FlowRow(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
                     (1..4).forEach { value ->
                         FilterChip(minutes == value, onClick = { minutes = value }, label = { Text("$value min") })
                     }
                 }
-                Text("Câmera no vídeo original")
-                FlowRow(horizontalArrangement = Arrangement.spacedBy(5.dp)) {
-                    listOf("auto" to "Sem divisão", "esquerda" to "Em cima ↖", "direita" to "Em cima ↗").forEach { (id, label) ->
-                        FilterChip(camera == id, onClick = { camera = id }, label = { Text(label) })
-                    }
-                }
+                Text("Câmera detectada automaticamente", style = MaterialTheme.typography.titleSmall)
+                Text("O sistema tenta localizar o quadro do streamer. " +
+                    "Streamer em cima e conteúdo principal embaixo, sem espaço entre os dois.",
+                    style = MaterialTheme.typography.bodySmall)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Switch(effects, { effects = it })
                     Text("Emojis e efeitos", Modifier.padding(start = 8.dp))
@@ -531,7 +689,7 @@ private fun LiveMonitorDialog(channel: String, busy: Boolean, message: String, o
         confirmButton = {
             Button(enabled = !busy, onClick = {
                 onConfirm(JSONObject().put("url", channel).put("modo", "ao_vivo").put("motor", "pc")
-                    .put("quantidade", count).put("duracao", minutes * 60).put("camera", camera)
+                    .put("quantidade", count).put("duracao", minutes * 60).put("camera", "auto")
                     .put("efeitos", effects).put("tendencias", trends))
             }) { Text(if (busy) "Iniciando…" else "Iniciar") }
         },

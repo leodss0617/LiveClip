@@ -13,6 +13,12 @@ import android.os.Build
 import android.os.Bundle
 import android.os.Parcelable
 import androidx.activity.ComponentActivity
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.WindowInsetsControllerCompat
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.material3.ScaffoldDefaults
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -39,6 +45,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Terminal
 import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material.icons.filled.VideoLibrary
+import androidx.compose.material.icons.filled.Folder
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Scaffold
 import androidx.compose.runtime.Composable
@@ -56,6 +63,7 @@ import com.example.service.LivePlayback
 import com.example.ui.CortaJaViewModel
 import com.example.ui.screens.LiveVideoSurface
 import com.example.ui.screens.LivesScreen
+import com.example.ui.screens.BibliotecaClipesScreen
 import androidx.compose.material.icons.filled.LiveTv
 import com.example.ui.screens.AnalysisProgressScreen
 import com.example.ui.screens.ExportScreen
@@ -71,7 +79,8 @@ enum class AppNavScreen {
     MAQUINA,
     TERMUX,
     CONFIGURACOES,
-    LIVES
+    LIVES,
+    BIBLIOTECA
 }
 
 class MainActivity : ComponentActivity() {
@@ -222,6 +231,18 @@ fun CortaJaApp(
     var recordingLink by rememberSaveable { mutableStateOf<String?>(null) }
     var incomingLive by rememberSaveable { mutableStateOf<String?>(null) }
     var expandedLive by rememberSaveable { mutableStateOf<String?>(null) }
+    val activity = androidx.compose.ui.platform.LocalContext.current as? ComponentActivity
+    DisposableEffect(expandedLive) {
+        val controller = activity?.let { WindowCompat.getInsetsController(it.window, it.window.decorView) }
+        if (expandedLive != null) {
+            controller?.hide(WindowInsetsCompat.Type.systemBars())
+            controller?.systemBarsBehavior =
+                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+        }
+        onDispose {
+            controller?.show(WindowInsetsCompat.Type.systemBars())
+        }
+    }
     var termuxJob by rememberSaveable { mutableStateOf<String?>(null) }
     val livesState = rememberSaveableStateHolder()
     val machineState = rememberSaveableStateHolder()
@@ -252,13 +273,17 @@ fun CortaJaApp(
     }
 
     val inMachineTabs = when (currentScreen) {
-        AppNavScreen.MAQUINA, AppNavScreen.TERMUX, AppNavScreen.CONFIGURACOES, AppNavScreen.LIVES -> true
+        AppNavScreen.MAQUINA, AppNavScreen.TERMUX, AppNavScreen.CONFIGURACOES, AppNavScreen.LIVES, AppNavScreen.BIBLIOTECA -> true
         else -> false
     }
     BackHandler(inMachineTabs && currentScreen != AppNavScreen.MAQUINA) {
         currentScreen = AppNavScreen.MAQUINA
     }
-    Scaffold(modifier = Modifier.fillMaxSize(), bottomBar = {
+    Scaffold(
+        modifier = Modifier.fillMaxSize(),
+        contentWindowInsets = if (expandedLive != null) WindowInsets(0, 0, 0, 0)
+            else ScaffoldDefaults.contentWindowInsets,
+        bottomBar = {
         if (inMachineTabs && expandedLive == null) {
             NavigationBar {
                 NavigationBarItem(currentScreen == AppNavScreen.MAQUINA,
@@ -267,6 +292,9 @@ fun CortaJaApp(
                 NavigationBarItem(currentScreen == AppNavScreen.LIVES,
                     { currentScreen = AppNavScreen.LIVES },
                     icon = { Icon(Icons.Filled.LiveTv, null) }, label = { Text("Lives") })
+                NavigationBarItem(currentScreen == AppNavScreen.BIBLIOTECA,
+                    { currentScreen = AppNavScreen.BIBLIOTECA },
+                    icon = { Icon(Icons.Filled.Folder, null) }, label = { Text("Clipes") })
                 NavigationBarItem(currentScreen == AppNavScreen.TERMUX,
                     { termuxJob = null; currentScreen = AppNavScreen.TERMUX },
                     icon = { Icon(Icons.Filled.Terminal, null) }, label = { Text("Termux") })
@@ -290,6 +318,7 @@ fun CortaJaApp(
             label = "ScreenTransition"
         ) { screen ->
             when (screen) {
+                AppNavScreen.BIBLIOTECA -> BibliotecaClipesScreen()
                 AppNavScreen.TERMUX -> TermuxScreen(selectedJob = termuxJob)
                 AppNavScreen.LIVES -> livesState.SaveableStateProvider("lives") {
                     LivesScreen(

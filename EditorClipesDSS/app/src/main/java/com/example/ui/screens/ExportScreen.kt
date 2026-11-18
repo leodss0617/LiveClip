@@ -498,6 +498,15 @@ fun ExportScreen(
                                 )
                             }
 
+                            // Enviar diretamente ao aplicativo TikTok; publicacao continua manual.
+                            Button(onClick = {
+                                runCatching {
+                                    val content = FileProvider.getUriForFile(context,
+                                        "${context.packageName}.fileprovider", clip.outputFile)
+                                    shareClipToTikTok(context, content)
+                                }.onFailure { shareClipFile(context, clip) }
+                            }) { Text("TikTok") }
+
                             // Share action
                             IconButton(
                                 onClick = {

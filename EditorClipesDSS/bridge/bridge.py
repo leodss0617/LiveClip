@@ -15,6 +15,10 @@ from concurrent.futures import ThreadPoolExecutor
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlsplit
+# Executar bridge.py como __main__ nao pode criar uma SEGUNDA classe JobStopped
+# em importacoes vindas de ao_vivo.py.
+if __name__ == '__main__':
+    sys.modules.setdefault('bridge', sys.modules[__name__])
 from momentos import select_moments
 from clipes import VOTES, adjusted_grade, clip_speech, details, review_bounds
 from ao_vivo import channel_url, grade, live_playback, process_live
@@ -83,9 +87,10 @@ def validate_logo(data):
         raise ValueError('O logo excede 512 pixels.')
     return width, height
 
-def limits(count, seconds):
-    if type(count) is not int or type(seconds) is not int or not 1 <= count <= 30 or not 10 <= seconds <= 240:
-        raise ValueError('Escolha de 1 a 30 clipes e duração de 10 a 240 segundos.')
+def limits(count, seconds, live=False):
+    valid_count = (count == 0 or 1 <= count <= 30) if live else 1 <= count <= 30
+    if type(count) is not int or type(seconds) is not int or not valid_count or not 10 <= seconds <= 240:
+        raise ValueError('Para lives use quantidade 0 (contínuo); para gravações, 1 a 30. Duração de 10 a 240 segundos.')
     return count, seconds
 
 def live_url(link):
@@ -221,12 +226,14 @@ def render_config(folder, spec, video, info):
         config['logo']=str(folder/'logo.png')
     stream=next(x for x in info['streams'] if x['codec_type']=='video')
     w,h=int(stream['width']),int(stream['height'])
-    camera=spec.get('camera')
-    if w>h and camera in {'esquerda','direita'}:
-        cw,ch=w//6*2,h//6*2
-        config.update(layout='camera',camera=[0 if camera=='esquerda' else (w-cw)//2*2,0,cw,ch],
-                      jogo=[cw if camera=='esquerda' else 0,0,(w-cw)//2*2,h//2*2])
-    elif h>=w: config['layout']='cheio'
+    if w>h:
+        from camera_auto import detect_webcam
+        detection = detect_webcam(video, w, h, folder/'camera-auto.json')
+        if detection:
+            config.update(layout='camera',camera=detection['camera'],
+                          jogo=detection['jogo'],deteccao_camera=detection['confianca'])
+    else:
+        config['layout']='cheio'
     if spec.get('efeitos'): config.update(efeitos_auto=True,sons_volume=0.43)
     return config
 
@@ -259,7 +266,7 @@ def channel_feedback(root):
 
 def review_clip(folder, spec, log, maximum):
     request = spec['revisao']
-    out = Path(os.environ.get('EDITOR_EXPORTS',EXPORTS))/folder.name
+    out = public_folder(folder,spec)
     out.mkdir(parents=True,exist_ok=True)
     if list(out.glob('*.mp4')):
         state(folder,'Revisão concluída',status='done',prontos=1,total=1)
@@ -342,6 +349,89 @@ def submit_job(folder, spec):
     return worker.submit(perform, folder, spec)
 
 
+def public_folder(folder, spec=None):
+    """Preserva pastas antigas; novos clipes de lives vão por streamer."""
+    base = Path(os.environ.get('EDITOR_EXPORTS', EXPORTS))
+    legacy = base / folder.name
+    if legacy.is_dir():
+        return legacy
+    if spec is None:
+        spec = read_json(folder / 'pedido.json', {})
+    if spec.get('modo') == 'ao_vivo':
+        channel = channel_url(spec.get('url'))
+        if channel:
+            slug = channel.rsplit('/', 1)[-1].lower()
+            return base / 'PorStreamer' / slug / folder.name
+    return legacy
+
+
+def clip_library(root):
+    groups = {}
+    for folder in root.iterdir():
+        if not folder.is_dir() or not re.fullmatch(r'[a-f0-9]{32}', folder.name):
+            continue
+        spec = read_json(folder / 'pedido.json', {})
+        link = channel_url(spec.get('url')) if spec.get('modo') == 'ao_vivo' else None
+        if not link:
+            continue
+        slug = link.rsplit('/', 1)[-1].lower()
+        output = public_folder(folder, spec)
+        if not output.is_dir():
+            continue
+        clips = groups.setdefault(slug, [])
+        for video in output.glob('*.mp4'):
+            match = re.search(r'_nota-(\d+)-(\d+)\.mp4$', video.name)
+            grade_value = float(match[1] + '.' + match[2]) if match else None
+            clips.append(dict(job=folder.name, arquivo=video.name, nota=grade_value,
+                              titulo=video.stem.split('_nota-')[0].replace('_',' ').replace('-',' '),
+                              atualizado=video.stat().st_mtime))
+    return {'pastas': [
+        {'streamer': slug, 'clipes': sorted(clips, key=lambda clip: clip['atualizado'], reverse=True)}
+        for slug, clips in sorted(groups.items())
+    ]}
+
+
+def delete_selected_clips(root, selection):
+    """Somente videos MP4 explicitamente selecionados, de jobs inativos e validos."""
+    if not isinstance(selection, list) or not 1 <= len(selection) <= 100:
+        raise ValueError('Selecione de 1 a 100 clipes para excluir por vez.')
+    validated = []
+    seen = set()
+    export_root = Path(os.environ.get('EDITOR_EXPORTS', EXPORTS)).resolve()
+    for entry in selection:
+        if not isinstance(entry, dict):
+            raise ValueError('Selecao invalida.')
+        ident, name = entry.get('job'), entry.get('arquivo')
+        if not isinstance(ident, str) or not re.fullmatch(r'[a-f0-9]{32}', ident):
+            raise ValueError('Identificador de clipe invalido.')
+        if not isinstance(name, str) or not re.fullmatch(r'[A-Za-z0-9_.-]{1,230}\.mp4', name):
+            raise ValueError('Nome de clipe invalido.')
+        if (ident, name) in seen:
+            raise ValueError('O mesmo clipe foi selecionado duas vezes.')
+        seen.add((ident,name))
+        folder = root / ident
+        spec = read_json(folder/'pedido.json',{})
+        if spec.get('modo') != 'ao_vivo' or not channel_url(spec.get('url')):
+            raise ValueError('Somente clipes de lives podem ser excluidos nesta biblioteca.')
+        status = read_json(folder/'estado.json',{})
+        if status.get('status') in ('queued','running'):
+            raise ValueError('Espere o monitoramento terminar antes de apagar os clipes.')
+        target = public_folder(folder) / name
+        if target.is_symlink() or not target.is_file():
+            raise ValueError('Um dos clipes nao foi encontrado.')
+        if not target.resolve().is_relative_to(export_root):
+            raise ValueError('Destino fora da biblioteca.')
+        validated.append((target, folder, name))
+    with CLIP_LOCK:
+        # Nenhum arquivo e removido sem validacao de todos os itens primeiro.
+        removed = 0
+        for target, folder, name in validated:
+            target.unlink()
+            (folder/'detalhes'/(name+'.meta.json')).unlink(missing_ok=True)
+            removed += 1
+    return {'excluidos':removed}
+
+
 def live_jobs(root, exports=None):
     latest = {}
     for folder in root.iterdir():
@@ -364,7 +454,7 @@ def live_jobs(root, exports=None):
             continue
         info.update(id=folder.name, canal=channel)
         if exports is not None:
-            info['arquivos'] = sorted(path.name for path in (exports / folder.name).glob('*.mp4'))
+            info['arquivos'] = sorted(path.name for path in public_folder(folder, spec).glob('*.mp4'))
         latest[channel] = priority, info
     return [info for _, info in sorted(latest.values(), key=lambda entry: entry[0], reverse=True)]
 
@@ -397,7 +487,8 @@ def perform(folder, spec):
     try:
         check_stop(folder)
         previous = folder/'estado.json'
-        using_phone = previous.is_file() and json.loads(previous.read_text()).get('motor_ativo') == 'termux'
+        using_phone = ((previous.is_file() and json.loads(previous.read_text()).get('motor_ativo') == 'termux')
+                       or (spec.get('modo') == 'ao_vivo' and spec.get('quantidade') == 0))
         if spec.get('motor') == 'pc' and not using_phone:
             import pc_client
             try:
@@ -420,8 +511,9 @@ def perform(folder, spec):
                 state(folder,'Aguardando a vez no Termux',status='queued',motor_ativo='termux',erro=None)
             phone_slot = True
         check_stop(folder)
-        count, maximum=limits(spec['quantidade'],spec['duracao'])
-        state(folder,'Preparando o trabalho',status='running',erro=None)
+        count, maximum=limits(spec['quantidade'],spec['duracao'],spec.get('modo') == 'ao_vivo')
+        state(folder,'Preparando o trabalho',status='running',erro=None,
+              motor_ativo='termux' if using_phone else 'pc')
         if 'revisao' in spec:
             review_clip(folder,spec,log,maximum)
             return
@@ -467,7 +559,7 @@ def perform(folder, spec):
                 video=with_audio
         state(folder,'Transcrevendo e procurando momentos')
         analysis=folder/'analise'
-        out=Path(os.environ.get('EDITOR_EXPORTS',EXPORTS))/folder.name
+        out=public_folder(folder,spec)
         out.mkdir(parents=True,exist_ok=True)
         already = len(list(out.glob('*.mp4')))
         if already >= count:
@@ -588,6 +680,17 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_POST(self):
         if not self.authorized(): return
+        chat_signal = re.fullmatch(r'/jobs/([a-f0-9]{32})/chat-signal',self.path)
+        if chat_signal:
+            return self.add_chat_signal(ROOT/chat_signal[1])
+        if self.path == '/library/delete':
+            try:
+                size = int(self.headers.get('Content-Length',0))
+                if not 0 < size <= 32768: raise ValueError('Selecao muito grande.')
+                request = json.loads(self.rfile.read(size))
+                return self.reply(delete_selected_clips(ROOT,request.get('clipes')),200)
+            except (ValueError, KeyError, OSError, TypeError, AttributeError) as exc:
+                return self.reply({'erro':str(exc)},400)
         if self.path == '/live/player':
             return self.open_live_player()
         stop=re.fullmatch(r'/jobs/([a-f0-9]{32})/stop',self.path)
@@ -625,7 +728,7 @@ class Handler(BaseHTTPRequestHandler):
                     check_live_capacity(channel)
                 elif not live_url(spec.get('url','')):
                     raise ValueError('Use um link HTTPS da Kick, Twitch ou YouTube.')
-                limits(spec['quantidade'],spec['duracao'])
+                limits(spec['quantidade'],spec['duracao'],spec.get('modo') == 'ao_vivo')
                 folder=ROOT/uuid.uuid4().hex
                 folder.mkdir()
             else:
@@ -660,7 +763,7 @@ class Handler(BaseHTTPRequestHandler):
         self.reply({'id':folder.name},201)
 
     def clip_details(self, folder, name):
-        path=EXPORTS/folder.name/name
+        path=public_folder(folder)/name
         if not path.is_file():
             raise FileNotFoundError('Clipe indisponível.')
         found = read_json(folder/'detalhes'/(name+'.meta.json'),{})
@@ -740,6 +843,33 @@ class Handler(BaseHTTPRequestHandler):
         finally:
             PLAYER_LOCK.release()
 
+    def add_chat_signal(self, folder):
+        """Somente contagem/animacao agregadas; sem nomes ou mensagens do chat."""
+        try:
+            payload = self.player_payload()
+            count = payload.get('mensagens')
+            excitement = payload.get('animacao')
+            if type(count) is not int or not 1 <= count <= 200:
+                raise ValueError('Quantidade de mensagens invalida.')
+            if type(excitement) not in (int,float) or not math.isfinite(excitement) or not 0 <= excitement <= 1:
+                raise ValueError('Intensidade invalida.')
+            with CLIP_LOCK:
+                spec = read_json(folder/'pedido.json',{})
+                status = read_json(folder/'estado.json',{})
+                if spec.get('modo') != 'ao_vivo' or status.get('status') != 'running' or (folder/'parar').exists():
+                    return self.reply({'erro':'Nao existe monitoramento ativo.'},409)
+                signals = folder/'chat-atividade.json'
+                history = read_json(signals,[])
+                now = time.time()
+                # Evita contagem duplicada, inclusive em mensagens repetidas da rede.
+                if history and now - history[-1]['registrado'] < 8:
+                    return self.reply({'ok':True,'ignorado':True},200)
+                history.append({'registrado':now,'mensagens':count,'animacao':round(float(excitement),2)})
+                write_checkpoint(signals,history[-600:])
+            return self.reply({'ok':True},201)
+        except (OSError, ValueError, TypeError, AttributeError, KeyError) as exc:
+            return self.reply({'erro':str(exc)},400)
+
     def mark_job(self, folder):
         try:
             payload = self.player_payload()
@@ -805,6 +935,14 @@ class Handler(BaseHTTPRequestHandler):
         if not self.authorized(): return
         if self.path=='/health': return self.reply({'ok':True,'lives':MAX_LIVES,'qualidade_player':'adaptativa'})
         if self.path=='/jobs/lives': return self.reply({'lives':live_jobs(ROOT, EXPORTS)})
+        if self.path=='/library': return self.reply(clip_library(ROOT))
+        public_chat = re.fullmatch(r'/chat/kick/([a-z0-9_-]{2,40})',self.path)
+        if public_chat:
+            from kick_chat import recent_messages
+            try:
+                return self.reply(recent_messages(public_chat[1]))
+            except ValueError as exc:
+                return self.reply({'erro':str(exc)},503)
         meta=re.fullmatch(r'/jobs/([a-f0-9]{32})/([A-Za-z0-9_.-]+\.mp4)/details',self.path)
         if meta:
             try:
@@ -816,7 +954,7 @@ class Handler(BaseHTTPRequestHandler):
         ident,filename=m.groups()
         folder=ROOT/ident
         status=folder/'estado.json'
-        public=EXPORTS/ident
+        public=public_folder(folder)
         if not status.exists(): return self.reply({'erro':'Trabalho não encontrado.'},404)
         if filename == 'log':
             log=folder/'processo.log'

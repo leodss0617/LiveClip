@@ -62,12 +62,14 @@ internal object LivePlayback {
         val link = runCatching { URI(raw.trim()) }.getOrNull() ?: return null
         val name = link.path?.trim('/') ?: return null
         if (!link.scheme.equals("https", ignoreCase = true) ||
-            link.host?.lowercase() !in listOf("kick.com", "www.kick.com") ||
+            link.host?.lowercase() !in listOf("kick.com", "www.kick.com", "twitch.tv", "www.twitch.tv") ||
             link.userInfo != null || link.port !in listOf(-1, 443) ||
             !name.matches(Regex("[A-Za-z0-9_-]{1,40}")) ||
             name.lowercase() in setOf("browse", "categories", "search", "following", "clips", "videos")
         ) return null
-        return "https://kick.com/" + name.lowercase()
+        val domain = if (link.host?.lowercase()?.endsWith("twitch.tv") == true)
+            "twitch.tv" else "kick.com"
+        return "https://" + domain + "/" + name.lowercase()
     }
 
     fun play(context: Context, channel: String, token: String) {

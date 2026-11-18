@@ -43,6 +43,8 @@ private const val BRIDGE_URL = "http://127.0.0.1:18754"
 private fun connect(path: String, token: String): HttpURLConnection =
     (URL(BRIDGE_URL + path).openConnection() as HttpURLConnection).apply {
         connectTimeout = 4_000
+        useCaches = false // nunca reutilizar resposta antiga do chat
+        setRequestProperty("Cache-Control", "no-cache, no-store")
         readTimeout = if (path == "/live/player") 30_000 else 15_000
         setRequestProperty("Authorization", "Bearer ${token.trim()}")
     }
@@ -392,6 +394,21 @@ fun MaquinaScreen(
                 "$title • Nota ${rating.groupValues[1]},${rating.groupValues[2]}/10"
             OutlinedButton(modifier = Modifier.fillMaxWidth(), enabled = !busy,
                 onClick = { openClip(job, name, label) }) { Text(label) }
+            Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                TextButton(enabled = !busy, onClick = {
+                    scope.launch {
+                        busy = true
+                        try {
+                            val video = clipFile(context, job, name, token)
+                            if (!shareClipToTikTok(context, video))
+                                message = "TikTok não encontrado; escolha um aplicativo."
+                        } catch (e: CancellationException) { throw e }
+                        catch (e: Exception) {
+                            message = "Falha ao compartilhar: " + (e.message ?: "verifique o clipe.")
+                        } finally { busy = false }
+                    }
+                }) { Text("Enviar ao TikTok") }
+            }
             TextButton(enabled = !busy, onClick = {
                 scope.launch {
                     busy = true

@@ -18,8 +18,8 @@ android {
     // O app usa Whisper JNI somente em arm64; limitar os binários evita
     // carregar bibliotecas x86 que não podem ser usadas no celular-alvo.
     ndk { abiFilters += listOf("arm64-v8a") }
-    versionCode = 22
-    versionName = "3.0"
+    versionCode = 33
+    versionName = "3.4.5"
 
     testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
   }

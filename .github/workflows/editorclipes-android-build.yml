@@ -1,5 +1,10 @@
-name: EditorClipesDSS - compilar Android Kick Chat
+name: EditorClipesDSS - Android 3.4.5 CI
 on:
+  push:
+    branches: [main]
+    paths:
+      - 'EditorClipesDSS/**'
+      - '.github/workflows/editorclipes-android-build.yml'
   pull_request:
     paths:
       - 'EditorClipesDSS/**'
@@ -41,6 +46,6 @@ jobs:
         if: success()
         uses: actions/upload-artifact@v4
         with:
-          name: editorclipes-kick-chat-debug-unverified
+          name: editorclipes-debug-ci-assinatura-temporaria
           path: EditorClipesDSS/app/build/outputs/apk/debug/*.apk
           retention-days: 7

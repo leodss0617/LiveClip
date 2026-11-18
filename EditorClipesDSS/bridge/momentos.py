@@ -12,10 +12,11 @@ TOPIC_SHIFT = re.compile(r'^(?:mudando de assunto|outro assunto|sobre outra cois
 OPEN_END = re.compile(r'(?:[,;:…]|\.{2,}|\b(?:porque|mas|então|que|e|o|a|no|na|com|pra|para))$', re.I)
 CONTEXT_LOOKAHEAD_SECONDS = 24
 
-AFTERTHOUGHT = re.compile(r'^(?:e foi assim|e é por isso|daí eu|a resposta|a conclusão|o resultado|o que aconteceu foi|sabe por que|foi por isso|no final das contas|e quando|eu explico)\b', re.I)
+AFTERTHOUGHT = re.compile(r'^(?:e foi assim|e é por isso|daí eu|a resposta|a conclusão|o resultado|o que aconteceu foi|sabe por que|foi por isso|no final das contas|e quando|eu explico|agora entendi|olha o resultado|por isso que)\b', re.I)
 SETUP = re.compile(r'^(?:pra contextualizar|para contextualizar|no começo|no início|na primeira tentativa|'
                    r'a regra|o problema|o desafio|aconteceu o seguinte|agora só (?:tem|resta|sobrou)|'
-                   r'(?:tô|estou) sem|eu tava tentando|antes disso)\b', re.I)
+                   r'(?:tô|estou) sem|eu tava tentando|antes disso|deixa eu explicar|'
+                   r'a história começou|o objetivo é|a missão é|o combinado era)\b', re.I)
 REACTION = re.compile(r'^(?:caraca|nossa|meu deus|mano|caramba|que isso|puta merda)[\s,!.:…-]+'
                       r'(?:eu achei|eu pensei|eu não|não acredito|não esperava|isso foi|quase|por pouco|'
                       r'que susto|olha isso|que jogada)\b', re.I)
@@ -74,7 +75,8 @@ def continues(previous, following):
 def opening_context(lines, anchor):
     first = anchor
     start, _, _, opening_words = lines[anchor]
-    while first and anchor - first < 2:
+    # Até três falas de preparação relacionadas: evita começar no meio do assunto.
+    while first and anchor - first < 3:
         earlier_start, earlier_end, earlier_text, earlier_words = lines[first-1]
         if (start - earlier_start > 13 or lines[first][0] - earlier_end > 8
                 or HOOK.search(earlier_text) or PAYOFF.search(earlier_text)
@@ -148,8 +150,8 @@ def select_moments(duration, count, maximum, words, energy, *, end_after=0, end_
             if len(title) > 68:
                 title = title[:67].rsplit(' ',1)[0].rstrip(' ,.!?—') + '…'
             next_start = lines[j+1][0] if j+1 < len(lines) else duration
-            clip_start = max(0,start-0.2)
-            clip_end = min(duration,clip_start+maximum,end+1.0,max(end,next_start))
+            clip_start = max(0,start-0.4)
+            clip_end = min(duration,clip_start+maximum,end+1.3,max(end,next_start))
             reasons = []
             if first < i:
                 reasons.append('Preparação da cena incluída antes do gancho')
