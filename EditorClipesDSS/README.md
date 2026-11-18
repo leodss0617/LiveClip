@@ -30,3 +30,6 @@ O monitoramento em segundo plano depende das restricoes do Android.
 ## Privacidade
 Nao versionar senhas, tokens, cookies, arquivos .env, keystores,
 logs, bancos locais, videos particulares, caches ou backups.
+
+## Video de demonstracao
+O unico MP4 no repositorio e app/src/main/res/raw/sample_live.mp4 (amostra de aproximadamente 4 segundos). Ele e necessario porque SampleVideoHelper referencia R.raw.sample_live durante a compilacao. Os clipes de lives e videos particulares continuam ignorados.
