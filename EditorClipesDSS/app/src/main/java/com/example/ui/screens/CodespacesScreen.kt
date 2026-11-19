@@ -7,6 +7,7 @@ import android.content.Intent
 import android.net.Uri
 import android.content.pm.PackageManager
 import android.util.Base64
+import android.widget.Toast
 import org.json.JSONArray
 import java.util.UUID
 import androidx.compose.foundation.layout.*
@@ -32,12 +33,23 @@ internal class CodespacesSession(context: Context) {
     var preferCloud by mutableStateOf(preferences.getBoolean("prefer_cloud", false))
         private set
     fun connect(context: Context, live: String? = null) {
-        if (name.length > 100 || !codespaceName.matches(name)) return
+        if (name.length > 100 || !codespaceName.matches(name)) {
+            if (live != null) preferences.edit().putString("status", "Configure o nome do Codespace para enviar a live.").apply()
+            return
+        }
         val channel = live?.let(LivePlayback::channel)
-        if (live != null && channel == null) return
+        if (live != null && channel == null) {
+            preferences.edit().putString("status", "Use um link válido da Kick ou Twitch.").apply()
+            return
+        }
         val pending = preferences.getBoolean("monitor_pending", false) &&
             System.currentTimeMillis() - preferences.getLong("started", 0) < 200_000
-        if (pending) return
+        if (pending) {
+            if (live != null) Toast.makeText(
+                context, "Aguarde o envio da live anterior e tente novamente.", Toast.LENGTH_SHORT
+            ).show()
+            return
+        }
         if (context.checkSelfPermission("com.termux.permission.RUN_COMMAND") !=
             PackageManager.PERMISSION_GRANTED) {
             preferences.edit().putString("status", "Conecte o Termux na tela Lives para autorizar os comandos.").apply()

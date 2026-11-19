@@ -46,7 +46,7 @@ try:
             except HTTPError as error:
                 if error.code != 409:
                     raise
-                print("O LiveClip recusou uma nova sessão. Confira as lives já em monitoramento.")
+                print("O LiveClip recusou o envio porque já existe uma live em andamento.")
         else:
             raise ValueError("Operação desconhecida.")
 except HTTPError as error:

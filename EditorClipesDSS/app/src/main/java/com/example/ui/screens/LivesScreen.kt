@@ -539,7 +539,7 @@ private fun LiveFullscreenOverlay(
                 )
             }
         ) {
-            StreamVideo(playback, Modifier.fillMaxSize(), controls = false)
+            StreamVideo(playback, Modifier.fillMaxSize())
             // Alça pequena na borda, sempre visível para descobrir o menu.
             Row(Modifier.align(Alignment.TopEnd).padding(top = 4.dp, end = 3.dp),
                 horizontalArrangement = Arrangement.spacedBy(1.dp)) {
@@ -587,12 +587,12 @@ private fun LiveFullscreenOverlay(
 }
 
 @Composable
-private fun StreamVideo(playback: LivePlaybackUi?, modifier: Modifier, controls: Boolean = false) {
+private fun StreamVideo(playback: LivePlaybackUi?, modifier: Modifier) {
     val player = playback?.player
     if (player == null) Box(modifier, contentAlignment = Alignment.Center) {
         Text(playback?.message ?: if (playback?.loading == true) "Conectando…" else "Toque em Assistir para abrir a transmissão",
             modifier = Modifier.padding(8.dp), style = MaterialTheme.typography.bodySmall)
-    } else LiveVideoSurface(player, modifier, controls)
+    } else LiveVideoSurface(player, modifier, controls = false)
 }
 
 @Composable
@@ -653,7 +653,7 @@ private fun StreamControls(
         verticalArrangement = Arrangement.spacedBy(4.dp),
     ) {
         leading()
-        if (player != null && playback != null) {
+        if (player != null) {
             val muted = playback.muted
             LiveAction(
                 if (muted) Icons.Filled.VolumeUp else Icons.Filled.VolumeOff,
