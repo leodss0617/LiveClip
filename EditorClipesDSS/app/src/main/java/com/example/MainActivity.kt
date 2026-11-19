@@ -244,6 +244,7 @@ fun CortaJaApp(
 
     var currentScreen by rememberSaveable { mutableStateOf(if (initialSharedUri != null) AppNavScreen.HOME else AppNavScreen.LIVES) }
     var recordingLink by rememberSaveable { mutableStateOf<String?>(null) }
+    var cloudLive by rememberSaveable { mutableStateOf<String?>(null) }
     var incomingLive by rememberSaveable { mutableStateOf<String?>(null) }
     var expandedLive by rememberSaveable { mutableStateOf<String?>(null) }
     val activity = androidx.compose.ui.platform.LocalContext.current as? ComponentActivity
@@ -320,6 +321,7 @@ fun CortaJaApp(
                             icon = { Icon(icon, contentDescription = null) },
                             onClick = {
                                 if (screen == AppNavScreen.TERMUX) termuxJob = null
+                                if (screen == AppNavScreen.CODESPACES) cloudLive = null
                                 currentScreen = screen
                                 navigationScope.launch { drawer.close() }
                             },
@@ -354,7 +356,7 @@ fun CortaJaApp(
         ) { screen ->
             when (screen) {
                 AppNavScreen.BIBLIOTECA -> BibliotecaClipesScreen()
-                AppNavScreen.CODESPACES -> CodespacesScreen(codespaces)
+                AppNavScreen.CODESPACES -> CodespacesScreen(codespaces, cloudLive)
                 AppNavScreen.TERMUX -> TermuxScreen(selectedJob = termuxJob)
                 AppNavScreen.LIVES -> livesState.SaveableStateProvider("lives") {
                     LivesScreen(
@@ -362,6 +364,12 @@ fun CortaJaApp(
                         onLinkConsumed = { incomingLive = null },
                         expanded = expandedLive,
                         onExpand = { expandedLive = it },
+                        preferCloud = codespaces.preferCloud,
+                        onCloud = { channel ->
+                            cloudLive = channel
+                            expandedLive = null
+                            currentScreen = AppNavScreen.CODESPACES
+                        },
                         onTermux = {
                             termuxJob = it
                             currentScreen = AppNavScreen.TERMUX

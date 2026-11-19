@@ -20,6 +20,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Cloud
 import androidx.compose.material.icons.filled.BookmarkBorder
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.ContentCut
@@ -54,12 +55,14 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.json.JSONArray
 import org.json.JSONObject
+import java.net.ConnectException
 
 private data class LiveJob(
     val id: String,
     val channel: String,
     val status: String,
     val phase: String,
+    val engine: String,
     val clips: List<String>,
 ) {
     val active: Boolean get() = status == "running" || status == "queued"
@@ -73,6 +76,8 @@ internal fun LivesScreen(
     expanded: String?,
     onExpand: (String?) -> Unit,
     onTermux: (String?) -> Unit,
+    onCloud: (String) -> Unit,
+    preferCloud: Boolean,
 ) {
     val context = LocalContext.current
     val prefs = remember { context.getSharedPreferences("maquina_de_cortes", Context.MODE_PRIVATE) }
@@ -178,6 +183,7 @@ internal fun LivesScreen(
             LiveJob(
                 item.getString("id"), item.getString("canal"), item.optString("status"),
                 item.optString("fase"),
+                item.optString("motor_ativo"),
                 List(clips.length()) { clips.getString(it) },
             )
         }.associateBy(LiveJob::channel)
@@ -225,13 +231,22 @@ internal fun LivesScreen(
     }
 
     monitor?.let { channel ->
-        LiveMonitorDialog(channel, busy, message, onDismiss = { monitor = null }) { spec ->
+        LiveMonitorDialog(channel, busy, message, onDismiss = { monitor = null }, onCloud = {
+            monitor = null
+            onCloud(channel)
+        }) { spec ->
             runJob {
-                val logo = context.getSharedPreferences("editorclipesdss", Context.MODE_PRIVATE)
-                    .getString("logo_uri", null)?.let(Uri::parse)
-                spec.put("logo", logo?.let { sendLogo(context, it, token) }.orEmpty())
-                request("/jobs", token, spec)
-                monitor = null
+                try {
+                    val logo = context.getSharedPreferences("editorclipesdss", Context.MODE_PRIVATE)
+                        .getString("logo_uri", null)?.let(Uri::parse)
+                    spec.put("logo", logo?.let { sendLogo(context, it, token) }.orEmpty())
+                    request("/jobs", token, spec)
+                    monitor = null
+                } catch (_: ConnectException) {
+                    reachable = false
+                    monitor = null
+                    onCloud(channel)
+                }
             }
         }
     }
@@ -243,12 +258,11 @@ internal fun LivesScreen(
             }
         } else {
             LiveAction(Icons.Filled.ContentCut, "Monitorar", "Monitorar cortes", enabled = !busy) {
-                if (reachable == true && token.isNotBlank()) {
+                if (!preferCloud && reachable != false && token.isNotBlank()) {
                     message = ""
                     monitor = channel
                 } else {
-                    message = "Conecte o Termux para monitorar cortes. O aplicativo tentará recuperar o código."
-                    pairTermux()
+                    onCloud(channel)
                 }
             }
         }
@@ -344,8 +358,8 @@ internal fun LivesScreen(
                 }
             }
             if (token.isBlank() || reachable == false) {
-                Text(if (token.isBlank()) "Monitoramento: conecte o Termux para ativar os cortes."
-                     else "O Termux não respondeu. Confira se o servidor está ativo.",
+                Text(if (token.isBlank()) "Termux desconectado. Monitorar abre o painel do Codespaces."
+                     else "Termux sem resposta. Monitorar abre o painel do Codespaces.",
                      color = MaterialTheme.colorScheme.onSurfaceVariant,
                      style = MaterialTheme.typography.bodySmall)
                 Button(onClick = { pairTermux() }) { Text("Conectar Termux") }
@@ -396,6 +410,19 @@ internal fun LivesScreen(
                             },
                             trailing = {
                                 MonitorAction(channel, job)
+                                if (reachable == true && job?.active != true) {
+                                    LiveAction(
+                                        if (preferCloud) Icons.Filled.ContentCut else Icons.Filled.Cloud,
+                                        if (preferCloud) "Termux" else "Nuvem",
+                                        if (preferCloud) "Monitorar no Termux" else "Monitorar no Codespaces",
+                                        enabled = !busy
+                                    ) {
+                                        if (preferCloud) {
+                                            message = ""
+                                            monitor = channel
+                                        } else onCloud(channel)
+                                    }
+                                }
                                 if (job != null) {
                                     if (job.clips.isNotEmpty()) {
                                         LiveAction(Icons.Filled.VideoLibrary, "Clipes", "Abrir " + job.clips.size + " clipes",
@@ -409,7 +436,15 @@ internal fun LivesScreen(
                             },
                         )
                         when {
-                            job?.active == true -> Text(job.phase, style = MaterialTheme.typography.bodySmall)
+                            job?.active == true -> {
+                                val engine = when (job.engine) {
+                                    "pc" -> "PC"
+                                    "termux" -> "Termux"
+                                    else -> null
+                                }
+                                if (engine != null) Text("Motor: $engine", style = MaterialTheme.typography.labelMedium)
+                                Text(job.phase, style = MaterialTheme.typography.bodySmall)
+                            }
                             job?.status == "error" -> Text("Última tentativa falhou. Veja Atividade.",
                                 style = MaterialTheme.typography.bodySmall)
                         }
@@ -665,7 +700,10 @@ private fun StreamControls(
 
 @OptIn(ExperimentalLayoutApi::class)
 @Composable
-private fun LiveMonitorDialog(channel: String, busy: Boolean, message: String, onDismiss: () -> Unit, onConfirm: (JSONObject) -> Unit) {
+private fun LiveMonitorDialog(
+    channel: String, busy: Boolean, message: String, onDismiss: () -> Unit,
+    onCloud: () -> Unit, onConfirm: (JSONObject) -> Unit
+) {
     val count = 0 // monitoramento contínuo até encerrar a live ou usuário parar
     var minutes by rememberSaveable(channel) { mutableStateOf(4) }
     var effects by rememberSaveable(channel) { mutableStateOf(false) }
@@ -677,7 +715,8 @@ private fun LiveMonitorDialog(channel: String, busy: Boolean, message: String, o
             Column(Modifier.heightIn(max = 390.dp).verticalScroll(rememberScrollState()),
                 verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 if (message.isNotBlank()) Text(message, color = MaterialTheme.colorScheme.error)
-                Text("Até 2 lives simultâneas: usa o PC se estiver disponível; sem PC, processa no Termux.", style = MaterialTheme.typography.bodySmall)
+                OutlinedButton(enabled = !busy, onClick = onCloud) { Text("Usar Codespaces") }
+                Text("O monitoramento contínuo no celular usa o Termux e aceita até 2 lives simultâneas.", style = MaterialTheme.typography.bodySmall)
                 Text("Clipes automáticos enquanto a live durar", style = MaterialTheme.typography.titleSmall)
                 Text("Sem quantidade fixa. Exporta apenas momentos com nota acima de 7,5, " +
                     "considerando começo, desenvolvimento e desfecho. Para ao encerrar a live, " +

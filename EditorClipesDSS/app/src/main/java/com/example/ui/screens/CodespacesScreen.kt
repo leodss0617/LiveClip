@@ -34,6 +34,8 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import kotlinx.coroutines.delay
+import com.example.service.LivePlayback
+import org.json.JSONObject
 
 private val codespaceName = Regex("[a-z0-9]+(?:-[a-z0-9]+)*")
 
@@ -43,13 +45,17 @@ internal class CodespacesSession(context: Context) {
         private set
     var autoConnect by mutableStateOf(preferences.getBoolean("auto_connect", true))
         private set
+    var preferCloud by mutableStateOf(preferences.getBoolean("prefer_cloud", false))
+        private set
     val monitor = CodespacesPage(context)
 
-    fun configure(name: String, autoConnect: Boolean) {
+    fun configure(name: String, autoConnect: Boolean, preferCloud: Boolean) {
         val changed = this.name != name
         this.name = name
         this.autoConnect = autoConnect
-        preferences.edit().putString("name", name).putBoolean("auto_connect", autoConnect).apply()
+        this.preferCloud = preferCloud
+        preferences.edit().putString("name", name).putBoolean("auto_connect", autoConnect)
+            .putBoolean("prefer_cloud", preferCloud).apply()
         if (changed) {
             monitor.close()
         }
@@ -140,11 +146,15 @@ internal fun rememberCodespacesSession(): CodespacesSession {
 }
 
 @Composable
-internal fun CodespacesScreen(session: CodespacesSession) {
+internal fun CodespacesScreen(
+    session: CodespacesSession, requestedLive: String? = null
+) {
     val context = LocalContext.current
     var browserError by remember { mutableStateOf(false) }
     var reloadCount by remember { mutableStateOf(0) }
     var timedOut by remember { mutableStateOf(false) }
+    val channel = requestedLive?.let(LivePlayback::channel)
+    var prepared by remember(channel) { mutableStateOf(false) }
     fun openInBrowser(url: String) {
         browserError = runCatching {
             context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
@@ -153,6 +163,7 @@ internal fun CodespacesScreen(session: CodespacesSession) {
     var configuring by remember { mutableStateOf(session.name.isEmpty()) }
     var name by remember { mutableStateOf(session.name) }
     var autoConnect by remember { mutableStateOf(session.autoConnect) }
+    var preferCloud by remember { mutableStateOf(session.preferCloud) }
     Column(Modifier.fillMaxSize()) {
         if (configuring) {
             Column(
@@ -172,10 +183,14 @@ internal fun CodespacesScreen(session: CodespacesSession) {
                     Text("Conectar ao abrir o app", Modifier.weight(1f))
                     Switch(checked = autoConnect, onCheckedChange = { autoConnect = it })
                 }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("Preferir Codespaces para novas lives", Modifier.weight(1f))
+                    Switch(checked = preferCloud, onCheckedChange = { preferCloud = it })
+                }
                 Button(
                     enabled = name.trim().length <= 100 && codespaceName.matches(name.trim()),
                     onClick = {
-                        session.configure(name.trim(), autoConnect)
+                        session.configure(name.trim(), autoConnect, preferCloud)
                         configuring = false
                     }
                 ) { Text("Conectar") }
@@ -201,6 +216,39 @@ internal fun CodespacesScreen(session: CodespacesSession) {
             timedOut = false
             delay(25_000)
             timedOut = !page.ready
+        }
+        LaunchedEffect(channel, page.ready, page.view, session.name) {
+            val view = page.view ?: return@LaunchedEffect
+            val panelHost = "${session.name}-8080.app.github.dev"
+            if (channel == null || !page.ready || Uri.parse(view.url.orEmpty()).host != panelHost) {
+                return@LaunchedEffect
+            }
+            val target = JSONObject.quote(channel)
+            val origin = JSONObject.quote("https://$panelHost")
+            view.evaluateJavascript(
+                """(() => {
+                    if (location.origin !== $origin) return false;
+                    const input = document.querySelector('#source-form #url');
+                    if (!input || (input.value && input.value !== $target)) return false;
+                    input.value = $target;
+                    return input.value === $target;
+                })()"""
+            ) { result ->
+                if (result == "true") {
+                    prepared = true
+                }
+            }
+        }
+        if (channel != null) {
+            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+            Text(
+                if (prepared) "Link preenchido. Confirme em Processar link."
+                else "Live na nuvem · ${channel.substringAfterLast('/')}",
+                Modifier.padding(horizontal = 12.dp)
+            )
+            TextButton(onClick = {
+                clipboard.setPrimaryClip(android.content.ClipData.newPlainText("Live", channel))
+            }) { Text("Copiar link da live") }
         }
         if (browserError) Text("Nenhum navegador disponível.", Modifier.padding(12.dp))
         if (page.error || (timedOut && !page.ready)) {
