@@ -117,6 +117,7 @@ internal fun LivesScreen(
     var message by remember { mutableStateOf("") }
     var monitor by rememberSaveable { mutableStateOf<String?>(null) }
     var remove by rememberSaveable { mutableStateOf<String?>(null) }
+    var officialLive by rememberSaveable { mutableStateOf<String?>(null) }
     var showClips by rememberSaveable { mutableStateOf<String?>(null) }
     var preview by remember { mutableStateOf<Pair<Uri, String>?>(null) }
     var busy by remember { mutableStateOf(false) }
@@ -320,7 +321,9 @@ internal fun LivesScreen(
             Modifier.widthIn(max = 760.dp).fillMaxWidth().verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
-            Text("Lives", style = MaterialTheme.typography.headlineMedium)
+            var kickLogin by rememberSaveable { mutableStateOf(false) }
+            OutlinedButton(onClick = { kickLogin = true }) { Text("Entrar na Kick") }
+            if (kickLogin) KickLoginDialog(onDismiss = { kickLogin = false })
             if (channels.size < LivePlayback.LIMIT) {
                 OutlinedTextField(draft, { draft = it }, modifier = Modifier.fillMaxWidth(),
                     label = { Text("Link da live na Kick ou Twitch") }, singleLine = true,
@@ -363,18 +366,19 @@ internal fun LivesScreen(
                                     }
                                 } else {
                                     LiveAction(Icons.Filled.PlayArrow, "Assistir", "Assistir à live") {
-                                        if (token.isNotBlank() && reachable == true) {
+                                        if (channel.startsWith("https://kick.com/") &&
+                                            (token.isBlank() || reachable != true || playback?.message != null)
+                                        ) {
+                                            officialLive = channel
+                                        } else if (token.isNotBlank() && reachable == true) {
                                             playbackAction {
                                                 pendingNativeChannel = channel
                                                 LivePlayback.play(context, channel, token)
                                             }
                                         } else {
-                                            // Sem servidor, a Kick oficial no navegador é mais
-                                            // confiável que um WebView em branco.
-                                            playbackAction {
-                                                context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(channel)))
+                                            if (!openOfficialStreamingBrowser(context, channel)) {
+                                                message = "Abra a Twitch pelo navegador ou conecte o Termux."
                                             }
-                                            message = "Para assistir com player e chat dentro do app, conecte o Termux."
                                         }
                                     }
                                 }
@@ -403,6 +407,8 @@ internal fun LivesScreen(
             }
         }
     }
+
+    officialLive?.let { channel -> KickOfficialLiveDialog(channel) { officialLive = null } }
 
     remove?.let { channel ->
         val active = jobs[channel]?.active == true

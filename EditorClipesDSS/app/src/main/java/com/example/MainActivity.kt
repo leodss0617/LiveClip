@@ -29,10 +29,8 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.CenterAlignedTopAppBar
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import com.example.ui.screens.MaquinaScreen
@@ -40,8 +38,21 @@ import com.example.ui.screens.ConfiguracoesScreen
 import com.example.ui.screens.TermuxScreen
 import com.example.ui.screens.CodespacesScreen
 import com.example.ui.screens.rememberCodespacesSession
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.ModalNavigationDrawer
+import androidx.compose.material3.ModalDrawerSheet
+import androidx.compose.material3.NavigationDrawerItem
+import androidx.compose.material3.DrawerValue
+import androidx.compose.material3.rememberDrawerState
+import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.IconButton
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.unit.dp
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material.icons.filled.Menu
+import kotlinx.coroutines.launch
 import androidx.compose.material3.Icon
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Terminal
@@ -231,7 +242,7 @@ fun CortaJaApp(
     val exportProgress by viewModel.exportProgress.collectAsState()
     val exportedClips by viewModel.exportedResults.collectAsState()
 
-    var currentScreen by rememberSaveable { mutableStateOf(if (initialSharedUri != null) AppNavScreen.HOME else AppNavScreen.MAQUINA) }
+    var currentScreen by rememberSaveable { mutableStateOf(if (initialSharedUri != null) AppNavScreen.HOME else AppNavScreen.LIVES) }
     var recordingLink by rememberSaveable { mutableStateOf<String?>(null) }
     var incomingLive by rememberSaveable { mutableStateOf<String?>(null) }
     var expandedLive by rememberSaveable { mutableStateOf<String?>(null) }
@@ -267,7 +278,6 @@ fun CortaJaApp(
             onLinkRead()
         }
     }
-    BackHandler(currentScreen == AppNavScreen.MAQUINA) { currentScreen = AppNavScreen.HOME }
 
     // If a project is actively analyzing, switch to progress screen
     LaunchedEffect(progress.isRunning, activeProject?.status) {
@@ -276,49 +286,67 @@ fun CortaJaApp(
         }
     }
 
-    val inMachineTabs = when (currentScreen) {
-        AppNavScreen.MAQUINA, AppNavScreen.TERMUX, AppNavScreen.CODESPACES, AppNavScreen.CONFIGURACOES, AppNavScreen.LIVES, AppNavScreen.BIBLIOTECA -> true
-        else -> false
+    val destinations = listOf(
+        Triple(AppNavScreen.LIVES, "Lives", Icons.Filled.LiveTv),
+        Triple(AppNavScreen.MAQUINA, "Máquina de cortes", Icons.Filled.VideoLibrary),
+        Triple(AppNavScreen.BIBLIOTECA, "Meus clipes", Icons.Filled.Folder),
+        Triple(AppNavScreen.TERMUX, "Termux", Icons.Filled.Terminal),
+        Triple(AppNavScreen.CODESPACES, "Codespaces", Icons.Filled.Terminal),
+        Triple(AppNavScreen.CONFIGURACOES, "Ajustes", Icons.Filled.Settings),
+        Triple(AppNavScreen.HOME, "Editor de arquivos", Icons.Filled.VideoLibrary)
+    )
+    val drawer = rememberDrawerState(DrawerValue.Closed)
+    val navigationScope = rememberCoroutineScope()
+    val destination = destinations.firstOrNull { it.first == currentScreen }
+    BackHandler(destination != null && currentScreen != AppNavScreen.LIVES &&
+        expandedLive == null && !drawer.isOpen) {
+        currentScreen = AppNavScreen.LIVES
     }
-    BackHandler(inMachineTabs && currentScreen != AppNavScreen.MAQUINA) {
-        currentScreen = AppNavScreen.MAQUINA
-    }
+
+    BackHandler(drawer.isOpen) { navigationScope.launch { drawer.close() } }
+
+    ModalNavigationDrawer(
+        drawerState = drawer,
+        gesturesEnabled = expandedLive == null && (drawer.isOpen || destination != null),
+        drawerContent = {
+            ModalDrawerSheet {
+                Column(Modifier.verticalScroll(rememberScrollState()).padding(16.dp)) {
+                    Text("EditorClipesDSS", style = MaterialTheme.typography.headlineSmall,
+                        modifier = Modifier.padding(vertical = 16.dp, horizontal = 12.dp))
+                    destinations.forEach { (screen, title, icon) ->
+                        NavigationDrawerItem(
+                            label = { Text(title) },
+                            selected = currentScreen == screen,
+                            icon = { Icon(icon, contentDescription = null) },
+                            onClick = {
+                                if (screen == AppNavScreen.TERMUX) termuxJob = null
+                                currentScreen = screen
+                                navigationScope.launch { drawer.close() }
+                            },
+                            modifier = Modifier.padding(vertical = 2.dp)
+                        )
+                    }
+                }
+            }
+        }
+    ) {
     Scaffold(
         modifier = Modifier.fillMaxSize(),
         contentWindowInsets = if (expandedLive != null) WindowInsets(0, 0, 0, 0)
             else ScaffoldDefaults.contentWindowInsets,
-        bottomBar = {
-        if (inMachineTabs && expandedLive == null) {
-            NavigationBar {
-                NavigationBarItem(currentScreen == AppNavScreen.MAQUINA,
-                    { currentScreen = AppNavScreen.MAQUINA },
-                    icon = { Icon(Icons.Filled.VideoLibrary, null) }, label = { Text("Cortes") })
-                NavigationBarItem(currentScreen == AppNavScreen.LIVES,
-                    { currentScreen = AppNavScreen.LIVES },
-                    icon = { Icon(Icons.Filled.LiveTv, null) }, label = { Text("Lives") })
-                NavigationBarItem(currentScreen == AppNavScreen.BIBLIOTECA,
-                    { currentScreen = AppNavScreen.BIBLIOTECA },
-                    icon = { Icon(Icons.Filled.Folder, null) }, label = { Text("Clipes") })
-                NavigationBarItem(currentScreen == AppNavScreen.TERMUX,
-                    { termuxJob = null; currentScreen = AppNavScreen.TERMUX },
-                    icon = { Icon(Icons.Filled.Terminal, null) }, label = { Text("Termux") })
-                NavigationBarItem(currentScreen == AppNavScreen.CODESPACES,
-                    { currentScreen = AppNavScreen.CODESPACES },
-                    icon = { Icon(Icons.Filled.Terminal, null) }, label = { Text("Nuvem") })
-                NavigationBarItem(currentScreen == AppNavScreen.CONFIGURACOES,
-                    { currentScreen = AppNavScreen.CONFIGURACOES },
-                    icon = { Icon(Icons.Filled.Settings, "Configurações") }, label = { Text("Ajustes") })
+        topBar = {
+            if (destination != null && expandedLive == null) {
+                TopAppBar(
+                    title = { Text(destination.second) },
+                    navigationIcon = {
+                        IconButton(onClick = { navigationScope.launch { drawer.open() } }) {
+                            Icon(Icons.Filled.Menu, contentDescription = "Abrir menu lateral")
+                        }
+                    }
+                )
             }
         }
-    }, topBar = {
-        if (currentScreen == AppNavScreen.HOME) {
-            CenterAlignedTopAppBar(title = {
-                TextButton(onClick = { currentScreen = AppNavScreen.MAQUINA }) {
-                    Text("Abrir Máquina de Cortes")
-                }
-            })
-        }
-    }) { innerPadding ->
+    ) { innerPadding ->
         Crossfade(
             targetState = currentScreen,
             modifier = Modifier.padding(innerPadding),
@@ -435,5 +463,6 @@ fun CortaJaApp(
                 }
             }
         }
+    }
     }
 }

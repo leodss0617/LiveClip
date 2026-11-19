@@ -2,10 +2,10 @@ package com.example.ui.screens
 
 import android.annotation.SuppressLint
 import android.content.Context
-import android.content.Intent
 import android.net.Uri
 import android.webkit.CookieManager
 import android.webkit.WebChromeClient
+import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
@@ -35,7 +35,7 @@ private data class PublicChatLine(val id: String, val author: String, val conten
 
 /** Chat público Kick: consulta o servidor local; mensagens legíveis em Compose.
  * A fonte é uma API web pública não oficial da Kick, que pode deixar de funcionar.
- * Conversar abre o chat da plataforma em WebView separado, com cookies de login.
+ * O chat oficial usa a mesma sessão WebView da tela de login da Kick.
  */
 @SuppressLint("SetJavaScriptEnabled")
 @Composable
@@ -68,11 +68,19 @@ internal fun KickChatPanel(
     var status by remember(channel) { mutableStateOf("Conectando às mensagens…") }
     var lastSuccessfulPoll by remember(channel) { mutableStateOf("") }
     var live by remember(channel) { mutableStateOf(false) }
-    var externalChat by remember(channel) { mutableStateOf(isTwitch) }
+    var externalChat by remember(channel) { mutableStateOf(isKick || isTwitch) }
+    var kickLogin by remember(channel) { mutableStateOf(false) }
     var lastSeen by remember(channel) { mutableStateOf(emptySet<String>()) }
     var refreshKey by remember(channel) { mutableIntStateOf(0) }
     var initialized by remember(channel) { mutableStateOf(false) }
+    var officialError by remember(channel) { mutableStateOf(false) }
     var webView by remember(channel) { mutableStateOf<WebView?>(null) }
+
+    if (kickLogin) KickLoginDialog(browserUrl = roomUrl, onDismiss = {
+        kickLogin = false
+        externalChat = true
+        webView?.reload()
+    })
 
     DisposableEffect(prefs) {
         val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
@@ -81,10 +89,10 @@ internal fun KickChatPanel(
         prefs.registerOnSharedPreferenceChangeListener(listener)
         onDispose { prefs.unregisterOnSharedPreferenceChangeListener(listener) }
     }
-    LaunchedEffect(channel, token, externalChat, refreshKey) {
-        if (!valid || !isKick || externalChat) return@LaunchedEffect
+    LaunchedEffect(channel, token, refreshKey) {
+        if (!valid || !isKick) return@LaunchedEffect
         if (token.isBlank()) {
-            status = "Conecte o Termux em Ajustes para ler o chat."
+            status = "Abra o chat oficial ou conecte o Termux em Ajustes."
             return@LaunchedEffect
         }
         while (true) {
@@ -145,22 +153,21 @@ internal fun KickChatPanel(
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             Text(if (isTwitch) "Chat Twitch" else "Chat Kick",
                 color = Color.White, style = MaterialTheme.typography.labelMedium)
-            if (isKick) TextButton(onClick = { status = "Atualizando mensagens…"; refreshKey++ },
+            if (isKick && valid) TextButton(onClick = { if (externalChat) webView?.reload() else { status = "Atualizando mensagens…"; refreshKey++ } },
                 contentPadding = PaddingValues(horizontal = 2.dp, vertical = 1.dp)) {
                 Text("Atualizar", color = Color.White, fontSize = 12.sp)
             }
-            TextButton(onClick = {
-                if (isKick || isTwitch) {
-                    // Chat autenticado em painel seguro integrado, sem WebView do Google.
-                    val address = if (isKick) "https://kick.com/$slug"
-                                  else "https://www.twitch.tv/$slug"
-                    if (!openOfficialStreamingBrowser(ctx, address)) {
-                        status = "Não foi possível abrir o painel integrado de chat. Verifique o Chrome."
-                    }
-                } else externalChat = !externalChat
-            }, contentPadding = PaddingValues(horizontal = 4.dp, vertical = 1.dp)) {
-                Text(if (isKick) "Conversar no site" else if (externalChat) "Mensagens" else "Conversar",
-                    color = Color(0xFF8FDFFF), fontSize = 12.sp)
+            if (isKick && valid) {
+                TextButton(onClick = { externalChat = !externalChat }) {
+                    Text(if (externalChat) "Público" else "Oficial", color = Color(0xFF8FDFFF))
+                }
+                TextButton(onClick = { kickLogin = true }) {
+                    Text("Entrar", color = Color(0xFF8FDFFF))
+                }
+            } else if (isTwitch && valid) {
+                TextButton(onClick = {
+                    openOfficialStreamingBrowser(ctx, "https://www.twitch.tv/$slug")
+                }) { Text("Conversar", color = Color(0xFF8FDFFF)) }
             }
         }
         if (!valid) {
@@ -168,6 +175,10 @@ internal fun KickChatPanel(
         } else if (externalChat || isTwitch) {
             // Chat completo somente quando solicitado. Ao contrário da versão
             // anterior, o site não fica invisível ocupando toda a superfície.
+            if (officialError) {
+                Text("O chat oficial falhou. Use Atualizar ou abra o chat Público.",
+                    color = Color.White, style = MaterialTheme.typography.bodySmall)
+            }
             AndroidView(
                 modifier = Modifier.weight(1f).fillMaxWidth()
                     .background(Color(0xFF10131B)),
@@ -180,15 +191,24 @@ internal fun KickChatPanel(
                         settings.allowContentAccess = false
                         settings.textZoom = 105
                         CookieManager.getInstance().setAcceptCookie(true)
-                        CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
+                        CookieManager.getInstance().setAcceptThirdPartyCookies(this, isTwitch)
                         webChromeClient = WebChromeClient()
                         webViewClient = object : WebViewClient() {
+                            override fun onPageStarted(view: WebView, url: String, favicon: android.graphics.Bitmap?) {
+                                officialError = false
+                            }
+
+                            override fun onReceivedError(view: WebView, request: WebResourceRequest, failure: WebResourceError) {
+                                if (request.isForMainFrame) officialError = true
+                            }
+
                             override fun shouldOverrideUrlLoading(view: WebView,
                                 request: WebResourceRequest): Boolean {
                                 val h = request.url.host.orEmpty().lowercase(Locale.ROOT)
-                                val allowed = h == "kick.com" || h.endsWith(".kick.com") ||
-                                    h == "twitch.tv" || h.endsWith(".twitch.tv")
-                                return request.url.scheme != "https" || !allowed
+                                if (!request.isForMainFrame) return false
+                                return if (isKick) !isKickPage(request.url)
+                                else request.url.scheme != "https" ||
+                                    !(h == "twitch.tv" || h.endsWith(".twitch.tv"))
                             }
                         }
                         loadUrl(roomUrl)
