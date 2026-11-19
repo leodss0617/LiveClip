@@ -6,6 +6,10 @@
 4. Abra o endereço do painel mostrado no terminal e use a senha mostrada ali. A porta deve permanecer **Private**.
 5. Cole um link público de YouTube, Kick ou Twitch. A seleção durante lives considera blocos de 20 minutos de vídeo recebido; não garante um corte por bloco. O celular apenas controla o painel.
 
+No EditorClipesDSS 3.4.7, abra **Nuvem**, informe o nome completo do Codespace e mantenha **Conectar ao abrir o app** ativado para carregar o editor remoto ao iniciar. Na primeira conexão, autorize sua conta GitHub e abra o terminal do editor. Se o painel ainda não foi preparado, execute `liveclip` no terminal. Após aplicar a configuração atual do dev container, o Codespace tenta retomar os serviços já configurados quando o editor se conecta.
+
+Na guia **Lives na nuvem**, entre no painel privado e cadastre o link da live. Acompanhe a captura, a análise e os clipes produzidos pelo LiveClip no Codespace. As tarefas cadastradas no painel são acompanhadas nessa guia.
+
 Para atualizar: `liveclip atualizar`. Para parar os serviços: `liveclip parar`.
 **Para encerrar o consumo de processamento, pare também o Codespace em https://github.com/codespaces.** Parar os serviços não desliga a máquina. Uma máquina parada ainda ocupa armazenamento; excluir o Codespace apaga seus arquivos e modelos. Baixe seus cortes antes.
 

@@ -16,5 +16,6 @@
       "disableAutomaticConfiguration": true
     }
   },
-  "postStartCommand": "bash .devcontainer/recover-network.sh"
+  "postStartCommand": "bash .devcontainer/recover-network.sh",
+  "postAttachCommand": "bash .devcontainer/start.sh retomar"
 }

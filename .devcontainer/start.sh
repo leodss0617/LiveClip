@@ -21,6 +21,11 @@ case "${1:-}" in
     fi
     echo 'Se o terminal nem abriu, consulte a página github.com/codespaces e os logs de criação. Não envie senhas, tokens ou o arquivo .env.'
     exit 0 ;;
+  retomar)
+    [[ ${CODESPACES:-false} == true && -s .env ]] || exit 0
+    task_stage='retomando painel do Codespace'
+    docker compose up -d --no-build
+    exit 0 ;;
   parar) docker compose stop; exit 0 ;;
   logs) docker compose logs -f --tail=60 model-setup studio; exit 0 ;;
   atualizar) git pull --ff-only ;;

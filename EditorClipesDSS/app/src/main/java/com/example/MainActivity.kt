@@ -38,6 +38,8 @@ import androidx.compose.runtime.saveable.rememberSaveableStateHolder
 import com.example.ui.screens.MaquinaScreen
 import com.example.ui.screens.ConfiguracoesScreen
 import com.example.ui.screens.TermuxScreen
+import com.example.ui.screens.CodespacesScreen
+import com.example.ui.screens.rememberCodespacesSession
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
 import androidx.compose.material3.Icon
@@ -78,6 +80,7 @@ enum class AppNavScreen {
     EXPORT,
     MAQUINA,
     TERMUX,
+    CODESPACES,
     CONFIGURACOES,
     LIVES,
     BIBLIOTECA
@@ -215,6 +218,7 @@ fun CortaJaApp(
     onLinkRead: () -> Unit = {},
     liveRequests: Int = 0
 ) {
+    val codespaces = rememberCodespacesSession()
     val projects by viewModel.projects.collectAsState()
     val activeProject by viewModel.currentProject.collectAsState()
     val candidates by viewModel.allCandidates.collectAsState()
@@ -273,7 +277,7 @@ fun CortaJaApp(
     }
 
     val inMachineTabs = when (currentScreen) {
-        AppNavScreen.MAQUINA, AppNavScreen.TERMUX, AppNavScreen.CONFIGURACOES, AppNavScreen.LIVES, AppNavScreen.BIBLIOTECA -> true
+        AppNavScreen.MAQUINA, AppNavScreen.TERMUX, AppNavScreen.CODESPACES, AppNavScreen.CONFIGURACOES, AppNavScreen.LIVES, AppNavScreen.BIBLIOTECA -> true
         else -> false
     }
     BackHandler(inMachineTabs && currentScreen != AppNavScreen.MAQUINA) {
@@ -298,6 +302,9 @@ fun CortaJaApp(
                 NavigationBarItem(currentScreen == AppNavScreen.TERMUX,
                     { termuxJob = null; currentScreen = AppNavScreen.TERMUX },
                     icon = { Icon(Icons.Filled.Terminal, null) }, label = { Text("Termux") })
+                NavigationBarItem(currentScreen == AppNavScreen.CODESPACES,
+                    { currentScreen = AppNavScreen.CODESPACES },
+                    icon = { Icon(Icons.Filled.Terminal, null) }, label = { Text("Nuvem") })
                 NavigationBarItem(currentScreen == AppNavScreen.CONFIGURACOES,
                     { currentScreen = AppNavScreen.CONFIGURACOES },
                     icon = { Icon(Icons.Filled.Settings, "Configurações") }, label = { Text("Ajustes") })
@@ -319,6 +326,7 @@ fun CortaJaApp(
         ) { screen ->
             when (screen) {
                 AppNavScreen.BIBLIOTECA -> BibliotecaClipesScreen()
+                AppNavScreen.CODESPACES -> CodespacesScreen(codespaces)
                 AppNavScreen.TERMUX -> TermuxScreen(selectedJob = termuxJob)
                 AppNavScreen.LIVES -> livesState.SaveableStateProvider("lives") {
                     LivesScreen(
