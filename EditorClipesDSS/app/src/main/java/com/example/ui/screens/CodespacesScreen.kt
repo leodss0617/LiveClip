@@ -5,6 +5,10 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import android.content.pm.PackageManager
+import android.util.Base64
+import org.json.JSONArray
+import java.util.UUID
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
@@ -20,13 +24,49 @@ import com.example.service.LivePlayback
 private val codespaceName = Regex("[a-z0-9]+(?:-[a-z0-9]+)*")
 
 internal class CodespacesSession(context: Context) {
-    private val preferences = context.getSharedPreferences("codespaces", Context.MODE_PRIVATE)
+    internal val preferences = context.getSharedPreferences("codespaces", Context.MODE_PRIVATE)
     var name by mutableStateOf(preferences.getString("name", "").orEmpty())
         private set
     var autoConnect by mutableStateOf(preferences.getBoolean("auto_connect", true))
         private set
     var preferCloud by mutableStateOf(preferences.getBoolean("prefer_cloud", false))
         private set
+    fun connect(context: Context, live: String? = null) {
+        if (name.length > 100 || !codespaceName.matches(name)) return
+        val channel = live?.let(LivePlayback::channel)
+        if (live != null && channel == null) return
+        val pending = preferences.getBoolean("monitor_pending", false) &&
+            System.currentTimeMillis() - preferences.getLong("started", 0) < 200_000
+        if (pending) return
+        if (context.checkSelfPermission("com.termux.permission.RUN_COMMAND") !=
+            PackageManager.PERMISSION_GRANTED) {
+            preferences.edit().putString("status", "Conecte o Termux na tela Lives para autorizar os comandos.").apply()
+            return
+        }
+        val requestId = UUID.randomUUID().toString()
+        preferences.edit().putString("request", requestId).putBoolean("monitor_pending", channel != null)
+            .putLong("started", System.currentTimeMillis())
+            .putString("status", if (channel == null) "Conectando ao Codespace…" else "Enviando a live ao Codespace…")
+            .apply()
+        runCatching {
+            val script = context.assets.open("codespace_monitor.py").use { it.readBytes() }
+            val payload = JSONArray().put(if (channel == null) "prepare" else "monitor").put(channel)
+            val code = Base64.encodeToString(script, Base64.NO_WRAP)
+            val argument = Base64.encodeToString(payload.toString().toByteArray(), Base64.NO_WRAP)
+            val remote = "cd /workspaces/LiveClip && " +
+                "(curl -fsS --max-time 2 http://127.0.0.1:8080/api/health >/dev/null || " +
+                "bash .devcontainer/start.sh retomar >&2) && " +
+                "printf %s $code | base64 -d | python3 - $argument"
+            runTermux(context, "/data/data/com.termux/files/home", arrayOf(
+                "-lc", "GH_PROMPT_DISABLED=1 timeout 180 gh codespace ssh -c \"\$1\" -- \"\$2\"",
+                "liveclip", name, remote
+            ), false, requestId)
+        }.onFailure {
+            preferences.edit().remove("request").putBoolean("monitor_pending", false)
+                .putString("status", "Não foi possível iniciar a conexão pelo Termux.").apply()
+        }
+    }
+
     fun configure(name: String, autoConnect: Boolean, preferCloud: Boolean) {
         this.name = name
         this.autoConnect = autoConnect
@@ -50,7 +90,14 @@ internal fun CodespacesScreen(session: CodespacesSession, requestedLive: String?
     var name by rememberSaveable { mutableStateOf(session.name) }
     var autoConnect by rememberSaveable { mutableStateOf(session.autoConnect) }
     var preferCloud by rememberSaveable { mutableStateOf(session.preferCloud) }
-    var attempted by rememberSaveable(session.name, channel) { mutableStateOf(false) }
+    var cloudStatus by remember(session) { mutableStateOf(session.preferences.getString("status", "").orEmpty()) }
+    DisposableEffect(session) {
+        val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { prefs, key ->
+            if (key == "status") cloudStatus = prefs.getString(key, "").orEmpty()
+        }
+        session.preferences.registerOnSharedPreferenceChangeListener(listener)
+        onDispose { session.preferences.unregisterOnSharedPreferenceChangeListener(listener) }
+    }
     var status by remember { mutableStateOf("") }
 
     fun open(url: String) {
@@ -67,13 +114,6 @@ internal fun CodespacesScreen(session: CodespacesSession, requestedLive: String?
     }
 
     val configured = session.name.length <= 100 && codespaceName.matches(session.name)
-    LaunchedEffect(configured, configuring, session.autoConnect, channel) {
-        if (configured && !configuring && session.autoConnect && !attempted) {
-            attempted = true
-            openPanel()
-        }
-    }
-
     Column(
         Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -86,7 +126,7 @@ internal fun CodespacesScreen(session: CodespacesSession, requestedLive: String?
                 singleLine = true, modifier = Modifier.fillMaxWidth()
             )
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text("Abrir painel ao entrar nesta tela", Modifier.weight(1f))
+                Text("Preparar Codespace ao abrir o app", Modifier.weight(1f))
                 Switch(checked = autoConnect, onCheckedChange = { autoConnect = it })
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -102,16 +142,18 @@ internal fun CodespacesScreen(session: CodespacesSession, requestedLive: String?
             ) { Text("Salvar") }
         } else {
             Text("Painel do LiveClip", style = MaterialTheme.typography.titleLarge)
-            Text("A porta 8080 é privada. Entre no GitHub na aba do navegador se for solicitado.")
+            if (cloudStatus.isNotBlank()) Text(cloudStatus)
+            OutlinedButton(onClick = { session.connect(context) }) { Text("Testar conexão") }
             if (channel != null) {
                 Text(channel)
+                Button(onClick = { session.connect(context, channel) }) { Text("Enviar monitoramento") }
                 TextButton(onClick = {
                     context.getSystemService(ClipboardManager::class.java)
                         ?.setPrimaryClip(ClipData.newPlainText("Link da live", channel))
                     status = "Link copiado. Cole no painel se o campo estiver vazio."
                 }) { Text("Copiar link da live") }
             }
-            Button(onClick = { attempted = true; openPanel() }) { Text("Abrir painel") }
+            Button(onClick = { openPanel() }) { Text("Abrir painel") }
             OutlinedButton(onClick = { open("https://${session.name}.github.dev/") }) {
                 Text("Abrir terminal")
             }

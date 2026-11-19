@@ -35,6 +35,22 @@ private const val TERMUX_HOME = "/data/data/com.termux/files/home"
 class TermuxResultReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val result = intent.getBundleExtra("result") ?: return
+        intent.getStringExtra("cloud_request")?.let { request ->
+            val state = context.getSharedPreferences("codespaces", Context.MODE_PRIVATE)
+            if (state.getString("request", null) == request) {
+                val output = result.getString("stdout").orEmpty().lineSequence().lastOrNull {
+                    it.startsWith("Codespace conectado.") || it.startsWith("Monitoramento enviado") ||
+                        it.startsWith("O LiveClip recusou")
+                }
+                val error = result.getString("stderr").orEmpty().lineSequence().lastOrNull {
+                    it.startsWith("Serviço LiveClip") || it.startsWith("O serviço LiveClip")
+                }
+                state.edit().remove("request").putBoolean("monitor_pending", false).putString(
+                    "status", output ?: error ?: "Falha na conexão SSH. Confira a autorização do GitHub no Termux e tente novamente."
+                ).apply()
+            }
+            return
+        }
         if (intent.getBooleanExtra("pair_bridge", false)) {
             val raw = result.getString("stdout").orEmpty().trim()
             val state = context.getSharedPreferences("maquina_de_cortes", Context.MODE_PRIVATE)
@@ -77,9 +93,13 @@ internal fun requestTermuxPairing(context: Context) {
     checkNotNull(context.startService(intent)) { "Serviço Termux indisponível." }
 }
 
-private fun runTermux(context: Context, directory: String, args: Array<String>, openFolder: Boolean) {
+internal fun runTermux(
+    context: Context, directory: String, args: Array<String>, openFolder: Boolean,
+    cloudRequest: String? = null
+) {
     val callback = Intent(context, TermuxResultReceiver::class.java)
         .putExtra("folder", openFolder)
+        .putExtra("cloud_request", cloudRequest)
     val flags = PendingIntent.FLAG_ONE_SHOT or
         (if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0)
     val result = PendingIntent.getBroadcast(context, System.nanoTime().toInt(), callback, flags)

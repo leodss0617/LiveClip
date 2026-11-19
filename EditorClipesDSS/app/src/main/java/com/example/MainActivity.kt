@@ -230,6 +230,10 @@ fun CortaJaApp(
     liveRequests: Int = 0
 ) {
     val codespaces = rememberCodespacesSession()
+    val codespacesContext = androidx.compose.ui.platform.LocalContext.current
+    LaunchedEffect(codespaces.name, codespaces.autoConnect) {
+        if (codespaces.autoConnect) codespaces.connect(codespacesContext)
+    }
     val projects by viewModel.projects.collectAsState()
     val activeProject by viewModel.currentProject.collectAsState()
     val candidates by viewModel.allCandidates.collectAsState()
@@ -366,6 +370,7 @@ fun CortaJaApp(
                         onExpand = { expandedLive = it },
                         preferCloud = codespaces.preferCloud,
                         onCloud = { channel ->
+                            codespaces.connect(codespacesContext, channel)
                             cloudLive = channel
                             expandedLive = null
                             currentScreen = AppNavScreen.CODESPACES

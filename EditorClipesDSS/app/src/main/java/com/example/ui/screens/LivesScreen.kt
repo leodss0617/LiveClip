@@ -358,8 +358,8 @@ internal fun LivesScreen(
                 }
             }
             if (token.isBlank() || reachable == false) {
-                Text(if (token.isBlank()) "Termux desconectado. Monitorar abre o painel do Codespaces."
-                     else "Termux sem resposta. Monitorar abre o painel do Codespaces.",
+                Text(if (token.isBlank()) "Termux desconectado. Monitorar envia a live ao Codespaces."
+                     else "Termux sem resposta. Monitorar envia a live ao Codespaces.",
                      color = MaterialTheme.colorScheme.onSurfaceVariant,
                      style = MaterialTheme.typography.bodySmall)
                 Button(onClick = { pairTermux() }) { Text("Conectar Termux") }
