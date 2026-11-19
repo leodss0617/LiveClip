@@ -30,6 +30,7 @@ class Moment:
     title: str
     score: float
     reasons: tuple[str, ...] = ()
+    effects: tuple[tuple[float, str], ...] = ()
 
 
 def phrases(words, duration):
@@ -177,11 +178,12 @@ def select_moments(duration, count, maximum, words, energy, *, end_after=0, end_
         payoff = False
         terms = set().union(*(line[3] for line in lines[first:i]))
         gaps = 0.0
+        endings = []
         for j in range(i, len(lines)):
             line_start, end, ending, ending_tokens = lines[j]
             span = end - start
             connected = j > i and continuation[j-1]
-            if span > maximum - 0.75 or end > end_before or (j > i and (
+            if span > maximum - 0.75 or (j > i and (
                 TOPIC_SHIFT.search(ending) or (not connected and line_start-lines[j-1][1] > 8)
             )):
                 break
@@ -191,7 +193,7 @@ def select_moments(duration, count, maximum, words, energy, *, end_after=0, end_
                                 and not re.search(r'\bnão (?:consegui|ganhei)\b', ending, re.I))
             if j > i:
                 gaps += max(0, line_start-lines[j-1][1]-1.5)
-            if (end <= end_after or span < min(5, duration * 0.6) or len(ending_tokens) < 2
+            if (span < min(5, duration * 0.6) or len(ending_tokens) < 2
                 or not answered or OPEN_END.search(ending) or continuation[j]):
                 continue
             exchange = j > i and ending.endswith(('.', '!')) and (
@@ -226,8 +228,24 @@ def select_moments(duration, count, maximum, words, energy, *, end_after=0, end_
                 reasons.append('Explicação ou reação final incluída')
             if lift >= 0.75: reasons.append('Intensidade do áudio acima do normal')
             reasons.append('Corte termina no fim de uma fala')
-            candidates.append((Moment(clip_start,clip_end,title,score,tuple(reasons)),frozenset(terms)))
-            break
+            # Compare more than one ending. A linked reaction or explanation can
+            # finish a scene that already contains an apparently valid result.
+            closure = bool(REACTION.search(ending) or AFTERTHOUGHT.search(ending))
+            closure |= bool(j > i and PAYOFF.search(ending) and answered)
+            effects = []
+            if hook and lines[i][0] >= clip_start + 0.3:
+                effects.append((lines[i][0], 'olhos'))
+            if closure and line_start >= clip_start + 1 and (
+                not effects or line_start - effects[-1][0] >= 4
+            ):
+                effects.append((line_start, 'exclamacao'))
+            endings.append((score + 2.5 * closure,
+                            Moment(clip_start,clip_end,title,score,tuple(reasons),tuple(effects)),
+                            frozenset(terms)))
+        if endings:
+            _, best, signature = max(endings, key=lambda ending: ending[0])
+            if end_after < best.end <= end_before + 0.08:
+                candidates.append((best, signature))
     picked = []
     for moment, signature in sorted(candidates,key=lambda entry: (-entry[0].score, entry[0].start)):
         if any(moment.start < old.end and old.start < moment.end or

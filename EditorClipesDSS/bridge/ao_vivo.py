@@ -313,6 +313,8 @@ def process_live(folder, spec, count, maximum, log):
                         label = f'{rating:.1f}'.replace('.', '-')
                         cut = {'id':index,'inicio':moment.start,'fim':moment.end,'titulo':moment.title,
                                'nota':rating,'motivos':reasons}
+                        if spec.get('efeitos') and getattr(moment, 'effects', ()):
+                            cut['efeitos'] = list(moment.effects)
                         if not video.is_file():
                             run(log,'ffmpeg','-nostdin','-v','error','-y','-f','concat','-safe','1',
                                 '-i',str(playlist),'-map','0:v:0','-map','0:a:0','-c','copy',str(video))

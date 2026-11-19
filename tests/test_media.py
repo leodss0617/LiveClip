@@ -121,3 +121,29 @@ def test_render_without_audio_is_valid(source, tmp_path):
     out = tmp_path / "silent-clip.mp4"
     render(silent, 0, 1, [], out)
     assert float(probe(out)["format"]["duration"]) > 0.9
+
+
+def test_render_reaction_with_highlight_zoom_and_ducked_music(source, tmp_path, monkeypatch):
+    from liveclip import media
+
+    monkeypatch.setattr(media, "face_track", lambda *a: (640, 360, [(0, 35, 25, 42, 45)]))
+    music = tmp_path / "soundtrack.wav"
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-f", "lavfi", "-i",
+         "sine=frequency=810:sample_rate=48000", "-t", "1", str(music)],
+        check=True,
+    )
+    words = [
+        {"start": 1.6, "end": 1.8, "word": "Meu"},
+        {"start": 1.8, "end": 2.05, "word": "Deus!"},
+    ]
+    ass = tmp_path / "captions.ass"
+    media.write_ass(words, 0, 2.2, ass)
+    assert r"{\1c&H0069DBFF&}Meu" in ass.read_text()
+    assert r"{\1c&H0069DBFF&}Deus!" in ass.read_text()
+    out = tmp_path / "reaction.mp4"
+    assert media.render(source, 0, 2.2, words, out, soundtrack=music) == "reacao"
+    streams = media.probe(out)["streams"]
+    assert {s["codec_type"] for s in streams} == {"audio", "video"}
+    video = next(s for s in streams if s["codec_type"] == "video")
+    assert (video["width"], video["height"]) == (1080, 1920)

@@ -1,1 +1,1 @@
-VERSION = "0.1.14-inicio-diagnostico"
+VERSION = "0.1.15-edicao-contextual"

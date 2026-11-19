@@ -124,7 +124,7 @@ class Store:
             changed = old.get("stage") != stage
             context = {
                 k: old[k]
-                for k in ("window_start", "window_end", "pending_music_start")
+                for k in ("window_start", "window_end", "pending_music_start", "pending_story_start")
                 if k in old
             }
             current = dict(

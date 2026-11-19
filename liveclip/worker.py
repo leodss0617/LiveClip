@@ -157,9 +157,11 @@ class Engine:
 
     def analysis_bounds(self, s, final=False):
         start = max(0, s["analyzed_until"] - 330)
-        pending = s.get("activity", {}).get("pending_music_start")
-        if isinstance(pending, (int, float)):
-            start = max(0, s["analyzed_until"] - 660, min(start, pending - 10))
+        activity = s.get("activity", {})
+        for key in ("pending_music_start", "pending_story_start"):
+            pending = activity.get(key)
+            if isinstance(pending, (int, float)):
+                start = max(0, s["analyzed_until"] - 660, min(start, pending - 10))
         return start, min(
             review_target(s["capture_seconds"], final), s["analyzed_until"] + 90
         )
@@ -333,7 +335,11 @@ class Engine:
                 else (
                     "Música ainda em andamento: aguardando o fim para preservar a apresentação."
                     if r.get("pending_music_start") is not None
-                    else "Nenhuma situação completa aprovada neste trecho. A análise continuará com mais contexto."
+                    else (
+                        "Aguardando desfecho: a cena será revista com a próxima parte da live."
+                        if r.get("pending_story_start") is not None
+                        else "Nenhuma situação completa aprovada neste trecho. A análise continuará com mais contexto."
+                    )
                 ),
                 window_start=start,
                 window_end=end,
@@ -343,6 +349,10 @@ class Engine:
                 ),
                 best_rating=max(
                     (v.get("rating", 0) for v in r.get("reviews", [])), default=0
+                ),
+                pending_story_start=(
+                    base + r["pending_story_start"]
+                    if r.get("pending_story_start") is not None else None
                 ),
                 pending_music_start=(
                     base + r["pending_music_start"]
@@ -394,6 +404,7 @@ class Engine:
                         "end": c["end"] - base,
                         "words": words,
                         "out": str((self.settings.data / "clips" / filename).resolve()),
+                        "soundtrack": str(self.settings.data / "soundtrack.wav"),
                     },
                     work,
                 )

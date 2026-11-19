@@ -193,3 +193,41 @@ def test_selection_and_review_request_typed_output(monkeypatch):
     assert "ending_index" in arc["required"]
     assert seen[1]["format"]["properties"]["approved"]["type"] == "boolean"
     assert seen[0]["options"]["num_ctx"] == 8192
+
+
+def test_review_can_extend_to_a_later_verified_payoff(monkeypatch):
+    editor = ai()
+    story = [
+        {"start": 1, "end": 5, "text": "Só tenho uma chance para vencer."},
+        {"start": 7, "end": 13, "text": "Ele me puxou para a última rodada."},
+        {"start": 17, "end": 19, "text": "Ganhei a luta!"},
+        {"start": 35, "end": 39, "text": "Meu Deus, virei a partida inteira!"},
+    ]
+    initial = {
+        "clips": [{
+            "title": "Ganhei a luta",
+            "reason": "Ele vence a luta após voltar para a rodada.",
+            "score": 0.85,
+            "complete": True,
+            "kind": "story",
+            "arc": {
+                "opening_index": 0, "development_index": 1, "ending_index": 2,
+                "starts_mid_story": False, "ends_mid_story": False,
+            },
+        }]
+    }
+
+    def response(_, data):
+        if "clip" not in data:
+            return initial
+        assert [line["i"] for line in data["transcript"]] == [0, 1, 2, 3]
+        return {
+            "approved": True, "starts_mid_story": False, "ends_mid_story": False,
+            "opening_index": 0, "development_index": 2, "ending_index": 3,
+            "title": "Virou a partida inteira",
+        }
+
+    monkeypatch.setattr(editor, "_chat", response)
+    [clip] = editor.select(story, 50)
+    assert clip["end"] == 39
+    assert clip["title"] == "Virou a partida inteira"

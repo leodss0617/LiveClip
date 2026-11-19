@@ -10,6 +10,8 @@ No EditorClipesDSS 3.4.7, abra **Nuvem**, informe o nome completo do Codespace e
 
 Na guia **Lives na nuvem**, entre no painel privado e cadastre o link da live. Acompanhe a captura, a análise e os clipes produzidos pelo LiveClip no Codespace. As tarefas cadastradas no painel são acompanhadas nessa guia.
 
+A edição na nuvem destaca a palavra falada e usa um zoom breve na câmera se houver uma reação identificada perto do fim. A trilha é opcional. Se houver um WAV autorizado em `/data/soundtrack.wav` dentro do contêiner `studio`, ela fica baixa e abaixa mais durante a fala.
+
 Para atualizar: `liveclip atualizar`. Para parar os serviços: `liveclip parar`.
 **Para encerrar o consumo de processamento, pare também o Codespace em https://github.com/codespaces.** Parar os serviços não desliga a máquina. Uma máquina parada ainda ocupa armazenamento; excluir o Codespace apaga seus arquivos e modelos. Baixe seus cortes antes.
 

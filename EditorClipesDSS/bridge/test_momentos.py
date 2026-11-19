@@ -129,3 +129,18 @@ class MomentSelectionTest(unittest.TestCase):
         cuts = select_moments(60, 1, 40, words, [-40]*60, end_after=25, end_before=45)
         self.assertEqual(len(cuts), 1)
         self.assertGreaterEqual(cuts[0].end, words[-1]['e'])
+
+class ReactionBoundaryTest(unittest.TestCase):
+    def test_prefers_the_later_reaction_and_defers_live_publication(self):
+        words = speech(3, 'Será que eu consigo ganhar a última rodada sozinho?')
+        words += speech(12, 'Consegui ganhar a última rodada sozinho!')
+        words += speech(17, 'Caraca, eu achei que ia perder tudo!')
+        words += speech(24, 'Mudando de assunto, vamos conversar sobre futebol.')
+        cuts = select_moments(32, 1, 27, words, [-40] * 32)
+        self.assertEqual(len(cuts), 1)
+        self.assertGreater(cuts[0].end, 18)
+        self.assertLess(cuts[0].end, 24)
+        self.assertIn((17, 'exclamacao'), cuts[0].effects)
+        self.assertEqual(
+            select_moments(32, 1, 27, words, [-40] * 32, end_before=16), []
+        )

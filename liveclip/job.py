@@ -107,6 +107,10 @@ def main():
                 f"IA lendo {len(transcript)} falas para procurar histórias completas.",
             )
             candidates = ai.select(transcript, duration, report=report)
+            edge_stories = []
+            if not p.get("final", False):
+                edge_stories = [c for c in candidates if duration - c["end"] < 12]
+                candidates = [c for c in candidates if duration - c["end"] >= 12]
             candidates, pending = protect_candidates(
                 candidates, spans, duration, final=p.get("final", False)
             )
@@ -126,6 +130,7 @@ def main():
                 "candidates": graded,
                 "reviews": reviews,
                 "pending_music_start": pending,
+                "pending_story_start": min((c["start"] for c in edge_stories), default=None),
                 "music_events": len(spans),
             }
 
@@ -136,7 +141,8 @@ def main():
             )
             output = {
                 "layout": render(
-                    p["source"], p["start"], p["end"], p["words"], p["out"]
+                    p["source"], p["start"], p["end"], p["words"], p["out"],
+                    soundtrack=p.get("soundtrack"),
                 )
             }
             output["technical"] = technical_rating(

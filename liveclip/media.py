@@ -1,5 +1,6 @@
 import json
 import math
+import re
 import subprocess
 import tempfile
 from pathlib import Path
@@ -59,7 +60,7 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
         groups.append(group)
     for group in groups:
         # ASS overrides and escape sequences cannot be supplied by transcribed text.
-        text = " ".join(
+        safe = [
             str(w["word"])
             .replace("\\", "／")
             .replace("{", "(")
@@ -67,14 +68,18 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
             .replace("\n", " ")
             .replace("\r", " ")
             for w in group
-        )
-        a, b = (
-            max(0, group[0]["start"] - start),
-            min(end - start, group[-1]["end"] - start),
-        )
-        if b > a:
+        ]
+        for i, word in enumerate(group):
+            begin = max(0, word["start"] - start)
+            stop = group[i + 1]["start"] if i + 1 < len(group) else word["end"]
+            finish = min(end - start, stop - start)
+            if timestamp(finish) == timestamp(begin) or finish < begin:
+                continue
+            highlighted = safe.copy()
+            highlighted[i] = r"{\1c&H0069DBFF&}" + safe[i] + r"{\r}"
+            text = " ".join(highlighted)
             header += (
-                f"Dialogue: 0,{timestamp(a)},{timestamp(b)},Default,,0,0,0,,{text}\n"
+                f"Dialogue: 0,{timestamp(begin)},{timestamp(finish)},Default,,0,0,0,,{text}\n"
             )
     Path(path).write_text(header, encoding="utf-8")
 
@@ -229,7 +234,7 @@ def concat_segments(segments, out):
         )
 
 
-def render(source, start, end, words, out):
+def render(source, start, end, words, out, *, soundtrack=None):
     out = Path(out)
     if not (0 <= start < end and end - start <= 600):
         raise ValueError("Duração inválida.")
@@ -296,9 +301,27 @@ def render(source, start, end, words, out):
             mask_right = min(width - 2, int(fx + fw * 1.7))
             mask_bottom = min(height - 2, int(fy + fh * 1.9))
             mask_w, mask_h = mask_right - mask_x, mask_bottom - mask_y
+            # A brief zoom is confined to the camera panel, preserving the action.
+            cue = None
+            for first, second in zip(words, words[1:]):
+                if end - min(8, duration / 3) <= first["start"] < end - 0.45 and (
+                    second["start"] - first["end"] <= 0.45
+                    and re.fullmatch(
+                        r"(?:não acredito|meu deus|que susto|que jogada)",
+                        f"{first['word']} {second['word']}".casefold().strip(" !?.,"),
+                    )
+                ):
+                    cue = round((first["start"] - start) * 30)
+            zoom = ""
+            if cue is not None:
+                # One input frame per output frame, with a smooth 0.8 s pulse.
+                zoom = (
+                    f",fps=30,zoompan=z='1+0.06*sin(PI*clip((on-{cue})/24,0,1))':"
+                    "x='iw/2-iw/(2*zoom)':y='ih/2-ih/(2*zoom)':d=1:s=1080x680:fps=30"
+                )
             graph = (
                 f"[0:v]split=2[f][c];[f]sendcmd=f=track.cmd,crop@face={cw}:{ch}:0:0,"
-                "scale=1080:680:force_original_aspect_ratio=decrease,pad=1080:680:(ow-iw)/2:(oh-ih)/2[face];"
+                f"scale=1080:680:force_original_aspect_ratio=decrease,pad=1080:680:(ow-iw)/2:(oh-ih)/2{zoom}[face];"
                 f"[c]format=rgb24,format=yuv420p,delogo=x={mask_x}:y={mask_y}:w={mask_w}:h={mask_h}:show=0,split=2[bg][fg];"
                 "[bg]scale=1080:1240:force_original_aspect_ratio=increase,crop=1080:1240,boxblur=20:2[blur];"
                 "[fg]scale=1080:1240:force_original_aspect_ratio=decrease[sharp];"
@@ -313,6 +336,22 @@ def render(source, start, end, words, out):
                 "crop=1080:1920,boxblur=20:2[bg];[f]scale=1080:1920:force_original_aspect_ratio=decrease[fg];"
                 "[bg][fg]overlay=(W-w)/2:(H-h)/2,setsar=1,subtitles=captions.ass[v]"
             )
+        audio_inputs = []
+        audio_output = ["0:a:0?", "-af", "loudnorm=I=-16:TP=-1.5:LRA=11"]
+        if soundtrack and Path(soundtrack).is_file() and any(
+            w["end"] > start and w["start"] < end for w in words
+        ) and any(s["codec_type"] == "audio" for s in probe(source)["streams"]):
+            audio_inputs = ["-stream_loop", "-1", "-i", str(Path(soundtrack).resolve())]
+            graph += (
+                ";[0:a:0]aresample=48000,loudnorm=I=-16:TP=-1.5:LRA=11,"
+                "aresample=48000,asplit=2[voice][control];"
+                "[1:a:0]aresample=48000,volume=0.10[music];"
+                "[music][control]sidechaincompress=threshold=0.035:ratio=8:"
+                "attack=25:release=320[ducked];"
+                "[voice][ducked]amix=inputs=2:duration=first:normalize=0,"
+                "alimiter=limit=0.84:level=0:latency=1[mix]"
+            )
+            audio_output = ["[mix]"]
         partial = out.with_suffix(".partial.mp4")
         cmd = [
             "ffmpeg",
@@ -322,6 +361,7 @@ def render(source, start, end, words, out):
             str(start),
             "-i",
             str(Path(source).resolve()),
+            *audio_inputs,
             "-t",
             str(duration),
             "-filter_complex_threads",
@@ -331,7 +371,7 @@ def render(source, start, end, words, out):
             "-map",
             "[v]",
             "-map",
-            "0:a:0?",
+            *audio_output,
             "-c:v",
             "libx264",
             "-preset",
@@ -348,8 +388,6 @@ def render(source, start, end, words, out):
             "aac",
             "-b:a",
             "160k",
-            "-af",
-            "loudnorm=I=-16:TP=-1.5:LRA=11",
             "-movflags",
             "+faststart",
             "-y",

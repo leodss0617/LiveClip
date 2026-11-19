@@ -234,7 +234,7 @@ def render_config(folder, spec, video, info):
                           jogo=detection['jogo'],deteccao_camera=detection['confianca'])
     else:
         config['layout']='cheio'
-    if spec.get('efeitos'): config.update(efeitos_auto=True,sons_volume=0.43)
+    if spec.get('efeitos'): config.update(sons_volume=0.43)
     return config
 
 
@@ -592,13 +592,8 @@ def perform(folder, spec):
                 if changed:
                     reasons.append('Nota ajustada pelo feedback do canal')
                 cut={'id':len(cuts)+1,'inicio':a,'fim':b,'titulo':moment.title,'nota':rating,'motivos':reasons}
-                if spec.get('efeitos'):
-                    peaks=sorted(range(int(a)+3,min(int(b)-2,len(energy))),key=lambda t:energy[t],reverse=True)
-                    marks=[]
-                    for t in peaks:
-                        if all(abs(t-v)>=8 for v in marks): marks.append(t)
-                        if len(marks)==2: break
-                    cut['efeitos']=[[t,'exclamacao' if j==0 else 'olhos'] for j,t in enumerate(sorted(marks))]
+                if spec.get('efeitos') and moment.effects:
+                    cut['efeitos'] = list(moment.effects)
                 cuts.append(cut)
             write_checkpoint(analysis/'plano-retomada.json',
                              {'referencia':reference,'palavras':words,'energia':energy,'cortes':cuts})
@@ -933,7 +928,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         if not self.authorized(): return
-        if self.path=='/health': return self.reply({'ok':True,'lives':MAX_LIVES,'qualidade_player':'adaptativa'})
+        if self.path=='/health': return self.reply({'ok':True,'lives':MAX_LIVES,'qualidade_player':'adaptativa','edicao':'contextual'})
         if self.path=='/jobs/lives': return self.reply({'lives':live_jobs(ROOT, EXPORTS)})
         if self.path=='/library': return self.reply(clip_library(ROOT))
         public_chat = re.fullmatch(r'/chat/kick/([a-z0-9_-]{2,40})',self.path)
