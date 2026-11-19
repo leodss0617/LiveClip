@@ -211,7 +211,6 @@ fun MaquinaScreen(
     }
     var count by rememberSaveable { mutableStateOf(6) }
     var maxSeconds by rememberSaveable { mutableStateOf(240) }
-    var camera by rememberSaveable { mutableStateOf("auto") }
     var effects by rememberSaveable { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var submitting by submission
@@ -318,12 +317,11 @@ fun MaquinaScreen(
                         for (minutes in 1..4) FilterChip(maxSeconds == minutes * 60,
                             onClick = { maxSeconds = minutes * 60 }, label = { Text("${minutes} min") })
                     }
-                    Text("Posição da câmera no vídeo original")
-                    FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        for ((id, label) in listOf("auto" to "Sem divisão", "esquerda" to "Em cima ↖", "direita" to "Em cima ↗")) {
-                            FilterChip(camera == id, onClick = { camera = id }, label = { Text(label) })
-                        }
-                    }
+                    Text("Enquadramento automático", style = MaterialTheme.typography.titleSmall)
+                    Text(
+                        "Quando a câmera do streamer é detectada, ela fica centralizada no topo, com a live embaixo.",
+                        style = MaterialTheme.typography.bodySmall
+                    )
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Switch(effects, { effects = it })
                         Text("Emojis e efeitos sonoros", Modifier.padding(start = 10.dp))
@@ -343,7 +341,7 @@ fun MaquinaScreen(
                     val url = if (input != null) "" else link.trim()
                     val video = input
                     val settings = JSONObject().put("quantidade", count).put("duracao", maxSeconds)
-                        .put("efeitos", effects).put("camera", camera).put("motor", "pc")
+                        .put("efeitos", effects).put("camera", "auto").put("motor", "pc")
                     submissionScope.launch {
                         try {
                             settings.put("logo", logo?.let { sendLogo(context, it, token) }.orEmpty())
