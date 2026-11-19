@@ -24,6 +24,10 @@ internal fun openOfficialStreamingBrowser(context: Context, url: String): Boolea
     if (uri.scheme != "https" || host !in setOf(
             "kick.com", "www.kick.com", "twitch.tv", "www.twitch.tv")) return false
 
+    return openAuthenticatedBrowserTab(context, uri)
+}
+
+internal fun openAuthenticatedBrowserTab(context: Context, uri: Uri): Boolean {
     val candidates = listOf("com.android.chrome", "com.chrome.beta",
         "com.microsoft.emmx", "com.sec.android.app.sbrowser", "org.mozilla.firefox")
     val service = "android.support.customtabs.action.CustomTabsService"

@@ -81,6 +81,20 @@ async function refresh({required=false}={}){
 async function status(){if(cloudStopping)return;refreshCloud();try{const s=await api('/status');$('model-notice').hidden=s.ai_ready&&s.processing_enabled!==false;if(s.processing_error)$('model-notice').textContent=s.processing_error;$('runtime-ai').textContent=`IA: ${s.ai_checked?'respondeu ao teste inicial':s.ai_ready?'modelo instalado; resposta ainda não verificada':'aguardando modelo'} (${s.selection_model||'local'})`;$('runtime-worker').textContent=s.worker_running?'Processamento: ativo':'Processamento: parado';$('runtime-profile').textContent=`Transcrição: ${s.whisper_model}`;$('runtime-version').textContent=`Painel: ${s.version}`;if(s.knowledge)$('knowledge-summary').textContent=`Base local: ${s.knowledge.records} registros · ${s.knowledge.analyses} trechos avaliados · ${s.knowledge.rendered} edições concluídas · ${s.knowledge.examples.length} avaliações suas usadas como referência. Sem treinamento de pesos.`;$('disk').textContent=`${s.free_gb} GB livres`;}catch(e){$('runtime-worker').textContent='Diagnóstico: sem conexão';}}
 $('refresh').onclick=async()=>{const b=$('refresh');b.disabled=true;try{await refresh();await status();}finally{b.disabled=false;}};
 $('login-form').onsubmit=async e=>{e.preventDefault();const button=e.target.querySelector('button');button.disabled=true;$('login-error').textContent='';try{await api('/login',{method:'POST',body:JSON.stringify({password:$('password').value})});await refresh({required:true});$('password').value='';await status();}catch(err){$('login-error').textContent=err.message;}finally{button.disabled=false;}};
+function prefillLiveFromLink() {
+ const raw = new URLSearchParams(location.hash.slice(1)).get('live');
+ if (!raw || $('url').value) return;
+ try {
+  const u = new URL(raw);
+  if (u.protocol === 'https:' && !u.username && !u.password && !u.port &&
+      ['kick.com', 'twitch.tv'].includes(u.hostname) && /^\/[a-z0-9_-]{1,40}\/?$/i.test(u.pathname)) {
+   $('url').value = u.href;
+   history.replaceState(null, '', location.pathname + location.search);
+  }
+ } catch {}
+}
+prefillLiveFromLink();
+window.addEventListener('hashchange', prefillLiveFromLink);
 $('source-form').onsubmit=async e=>{e.preventDefault();$('start').disabled=true;tell('');try{await api('/sessions',{method:'POST',body:JSON.stringify({url:$('url').value.trim()})});$('url').value='';await refresh();tell('Monitoramento solicitado. Aguarde a conexão com a plataforma.');}catch(err){tell(err.message,true);$('start').disabled=false;}};
 $('logout').onclick=async()=>{try{await api('/logout',{method:'POST'});}finally{showLogin();}};
 document.addEventListener('visibilitychange',()=>{if(!document.hidden&&!$('studio').hidden){refresh();status();}});
