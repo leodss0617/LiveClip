@@ -144,3 +144,15 @@ class ReactionBoundaryTest(unittest.TestCase):
         self.assertEqual(
             select_moments(32, 1, 27, words, [-40] * 32, end_before=16), []
         )
+
+class ClipTitleTest(unittest.TestCase):
+    def test_title_skips_transition_and_uses_event_from_the_clip(self):
+        from momentos import scene_title, tokens
+
+        transcript = [
+            "Agora a gente não está mais, ó, calma, perfeito?",
+            "O carro atravessou a pista na contramão.",
+            "Tá bom, perfeito!",
+        ]
+        scene = [(i, i + 1, phrase, tokens(phrase)) for i, phrase in enumerate(transcript)]
+        self.assertEqual(scene_title(scene), "O carro atravessou a pista na contramão.")

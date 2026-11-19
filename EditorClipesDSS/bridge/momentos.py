@@ -93,6 +93,7 @@ def opening_context(lines, anchor):
 
 
 TITLE_NOISE = re.compile(r'^(?:(?:mano|cara|chat|galera|gente|véi|tipo|olha só)[,!.:\s-]+){1,3}', re.I)
+TITLE_FILLER = re.compile(r'\b(?:calma|perfeito|beleza|tá bom|agora a gente)\b', re.I)
 TITLE_TOO_VAGUE = re.compile(r'^(?:não acredito|que isso|caraca|meu deus|ganhei|perdi|deu certo|deu errado)[!?.\s]*$', re.I)
 
 
@@ -151,13 +152,26 @@ def scene_title(scene, hook_index=0):
             combo = f'{hook} {ending}'
             if len(combo) <= 68:
                 return _short_title(combo)
-    # Sem desfecho explícito: pergunta + resposta pertencentes à mesma cena.
+    # Preferir uma fala concreta da própria cena a uma frase de transição.
+    options = [
+        _title_phrase(line[2]) for line in scene
+        if len(tokens(line[2])) >= 4 and not TITLE_FILLER.search(line[2])
+        and not DEPENDENT.search(line[2])
+    ]
+    if (TITLE_FILLER.search(hook) or TITLE_TOO_VAGUE.fullmatch(hook)) and options:
+        return _short_title(max(options, key=lambda title: (
+            not title.endswith('?'), len(tokens(title))
+        )))
+    # Sem desfecho explícito: pergunta e resposta da mesma cena.
     last = _title_phrase(scene[-1][2])
-    if hook and last and hook != last and not last.endswith('?'):
+    if hook and last and hook != last and not last.endswith('?') and not TITLE_FILLER.search(last):
         combo = f'{hook} {last}'
         if len(combo) <= 68 and len(tokens(last)) >= 3:
             return _short_title(combo)
-    return _short_title(hook or last or scene[0][2])
+    for phrase in (hook, last):
+        if phrase and not TITLE_FILLER.search(phrase) and not TITLE_TOO_VAGUE.fullmatch(phrase):
+            return _short_title(phrase)
+    return 'Momento da transmissão'
 
 
 def select_moments(duration, count, maximum, words, energy, *, end_after=0, end_before=None):

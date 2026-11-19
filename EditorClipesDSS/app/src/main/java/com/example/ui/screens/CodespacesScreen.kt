@@ -2,6 +2,8 @@ package com.example.ui.screens
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.content.Intent
+import android.net.Uri
 import android.graphics.Bitmap
 import android.webkit.WebResourceError
 import android.webkit.WebResourceRequest
@@ -15,7 +17,6 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
-import androidx.compose.material3.FilterChip
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -32,6 +33,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
+import kotlinx.coroutines.delay
 
 private val codespaceName = Regex("[a-z0-9]+(?:-[a-z0-9]+)*")
 
@@ -41,7 +43,6 @@ internal class CodespacesSession(context: Context) {
         private set
     var autoConnect by mutableStateOf(preferences.getBoolean("auto_connect", true))
         private set
-    val terminal = CodespacesPage(context)
     val monitor = CodespacesPage(context)
 
     fun configure(name: String, autoConnect: Boolean) {
@@ -50,21 +51,17 @@ internal class CodespacesSession(context: Context) {
         this.autoConnect = autoConnect
         preferences.edit().putString("name", name).putBoolean("auto_connect", autoConnect).apply()
         if (changed) {
-            terminal.close()
             monitor.close()
         }
     }
 
-    fun openTerminal() {
-        if (name.isNotEmpty()) terminal.load("https://$name.github.dev/")
-    }
+
 
     fun openMonitor() {
         if (name.isNotEmpty()) monitor.load("https://$name-8080.app.github.dev/")
     }
 
     fun close() {
-        terminal.close()
         monitor.close()
     }
 }
@@ -75,9 +72,13 @@ internal class CodespacesPage(private val context: Context) {
     var error by mutableStateOf(false)
         private set
 
+    var ready by mutableStateOf(false)
+        private set
+
     @SuppressLint("SetJavaScriptEnabled")
     fun load(url: String) {
         if (view != null) return
+        val panelHost = Uri.parse(url).host
         view = WebView(context).apply {
             settings.javaScriptEnabled = true
             settings.domStorageEnabled = true
@@ -94,6 +95,15 @@ internal class CodespacesPage(private val context: Context) {
 
                 override fun onPageStarted(view: WebView, url: String, favicon: Bitmap?) {
                     error = false
+                    ready = false
+                }
+
+                override fun onPageFinished(view: WebView, url: String) {
+                    ready = !error && Uri.parse(url).host == panelHost
+                }
+
+                override fun onReceivedHttpError(view: WebView, request: WebResourceRequest, response: android.webkit.WebResourceResponse) {
+                    if (request.isForMainFrame) error = true
                 }
 
                 override fun onReceivedError(view: WebView, request: WebResourceRequest, failure: WebResourceError) {
@@ -112,6 +122,7 @@ internal class CodespacesPage(private val context: Context) {
         }
         view = null
         error = false
+        ready = false
     }
 }
 
@@ -120,7 +131,7 @@ internal fun rememberCodespacesSession(): CodespacesSession {
     val context = LocalContext.current
     val session = remember(context) { CodespacesSession(context) }
     LaunchedEffect(session) {
-        if (session.autoConnect) session.openTerminal()
+        if (session.autoConnect) session.openMonitor()
     }
     DisposableEffect(session) {
         onDispose { session.close() }
@@ -130,7 +141,15 @@ internal fun rememberCodespacesSession(): CodespacesSession {
 
 @Composable
 internal fun CodespacesScreen(session: CodespacesSession) {
-    var monitoring by remember { mutableStateOf(false) }
+    val context = LocalContext.current
+    var browserError by remember { mutableStateOf(false) }
+    var reloadCount by remember { mutableStateOf(0) }
+    var timedOut by remember { mutableStateOf(false) }
+    fun openInBrowser(url: String) {
+        browserError = runCatching {
+            context.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse(url)))
+        }.isFailure
+    }
     var configuring by remember { mutableStateOf(session.name.isEmpty()) }
     var name by remember { mutableStateOf(session.name) }
     var autoConnect by remember { mutableStateOf(session.autoConnect) }
@@ -169,26 +188,27 @@ internal fun CodespacesScreen(session: CodespacesSession) {
             horizontalArrangement = Arrangement.spacedBy(4.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            FilterChip(!monitoring, { monitoring = false }, { Text("Terminal") })
-            FilterChip(monitoring, { monitoring = true }, { Text("Lives na nuvem") })
-            TextButton(onClick = { configuring = true }) { Text("Configurar") }
+            TextButton(onClick = { reloadCount++; session.monitor.view?.reload() }) { Text("Recarregar") }
+            TextButton(onClick = {
+                openInBrowser("https://${session.name}.github.dev/")
+            }) { Text("Terminal") }
+            TextButton(onClick = { configuring = true }) { Text("Ajustes") }
         }
 
-        LaunchedEffect(session.name, monitoring) {
-            if (monitoring) session.openMonitor() else session.openTerminal()
+        LaunchedEffect(session.name) { session.openMonitor() }
+        val page = session.monitor
+        LaunchedEffect(session.name, reloadCount) {
+            timedOut = false
+            delay(25_000)
+            timedOut = !page.ready
         }
-
-        val page = if (monitoring) session.monitor else session.terminal
-        if (page.error) {
-            Text("Falha ao conectar ao Codespace.", Modifier.padding(horizontal = 12.dp))
+        if (browserError) Text("Nenhum navegador disponível.", Modifier.padding(12.dp))
+        if (page.error || (timedOut && !page.ready)) {
+            Text("O painel da nuvem demorou a responder.", Modifier.padding(horizontal = 12.dp))
+            TextButton(onClick = { openInBrowser("https://${session.name}-8080.app.github.dev/") }) {
+                Text("Abrir painel no navegador")
+            }
         }
-        if (monitoring) {
-            Text(
-                "Cadastre a live no painel para acompanhar a captura e os cortes no Codespace.",
-                Modifier.padding(horizontal = 12.dp)
-            )
-        }
-        TextButton(onClick = { page.view?.reload() }) { Text("Recarregar") }
         AndroidView(
             modifier = Modifier.fillMaxSize(),
             factory = { FrameLayout(it) },

@@ -221,7 +221,7 @@ def log_fallback(log, exc):
 
 
 def render_config(folder, spec, video, info):
-    config={'video':str(video),'estilo':'amarelo','layout':'desfoque','zoom_automatico':False,'bordas_confirmadas':True}
+    config={'video':str(video),'estilo':'amarelo','layout':'desfoque','zoom_automatico':False,'bordas_confirmadas':True,'titulo_na_tela':False}
     if (folder/'logo.png').is_file():
         config['logo']=str(folder/'logo.png')
     stream=next(x for x in info['streams'] if x['codec_type']=='video')

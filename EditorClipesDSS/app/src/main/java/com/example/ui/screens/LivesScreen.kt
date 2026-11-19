@@ -274,6 +274,17 @@ internal fun LivesScreen(
     }
 
     val activePlayer = expanded?.let(players::get)
+    LaunchedEffect(expanded, activePlayer) {
+        val channel = expanded ?: return@LaunchedEffect
+        if (channel.startsWith("https://kick.com/") && activePlayer != null && activePlayer.player == null &&
+            !activePlayer.loading && activePlayer.message != null &&
+            activePlayer.message != "A transmissão terminou."
+        ) {
+            onExpand(null)
+            officialLive = channel
+        }
+    }
+
     if (expanded != null && activePlayer != null) {
         val activity = context as? Activity
         DisposableEffect(expanded) {
